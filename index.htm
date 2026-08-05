@@ -12,17 +12,47 @@
 
     <h1>📈 AI Trading Assistant</h1>
 
+    <p>Select your Trading Chart</p>
+
     <input type="file" id="imageUpload" accept="image/*">
 
     <br><br>
 
-    <img id="preview" style="display:none; max-width:100%; border-radius:10px;">
+    <img id="preview" style="display:none;max-width:100%;border-radius:10px;">
 
     <br><br>
 
     <button onclick="analyzeChart()">Analyze Chart</button>
 
+    <button onclick="clearResult()">Clear</button>
+
+    <hr>
+
     <div id="result"></div>
+
+    <h3>📊 Analysis Result</h3>
+
+    <div id="signal"></div>
+    <div id="entry"></div>
+    <div id="stoploss"></div>
+    <div id="target"></div>
+    <hr>
+
+<h3>📊 Trade Summary</h3>
+
+<table style="width:100%;border-collapse:collapse;">
+<tr>
+    <th>Trend</th>
+    <th>Signal</th>
+    <th>Confidence</th>
+</tr>
+
+<tr>
+    <td id="trendCell">-</td>
+    <td id="signalCell">-</td>
+    <td id="confidenceCell">-</td>
+</tr>
+</table>
 
 </div>
 
