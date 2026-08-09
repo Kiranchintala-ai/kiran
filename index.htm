@@ -1,60 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Trading Assistant</title>
-    <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<div class="container">
+<h1>📈 AI Trading Assistant</h1>
 
-    <h1>📈 AI Trading Assistant</h1>
+<p>Upload your BTC/USD trading charts</p>
 
-    <p>Select your Trading Chart</p>
+<hr>
 
-    <input type="file" id="imageUpload" accept="image/*">
+<h3>🕐 1H Chart — Trend</h3>
 
-    <br><br>
+<input type="file" id="chart1H" accept="image/*">
 
-    <img id="preview" style="display:none;max-width:100%;border-radius:10px;">
+<br><br>
 
-    <br><br>
+<img
+    id="preview1H"
+    style="display:none;max-width:100%;border-radius:10px;"
+>
 
-    <button onclick="analyzeChart()">Analyze Chart</button>
+<hr>
 
-    <button onclick="clearResult()">Clear</button>
+<h3>🕧 30M Chart — Main Setup</h3>
 
-    <hr>
+<input type="file" id="chart30M" accept="image/*">
 
-    <div id="result"></div>
+<br><br>
 
-    <h3>📊 Analysis Result</h3>
+<img
+    id="preview30M"
+    style="display:none;max-width:100%;border-radius:10px;"
+>
 
-    <div id="signal"></div>
-    <div id="entry"></div>
-    <div id="stoploss"></div>
-    <div id="target"></div>
-    <hr>
+<hr>
 
-<h3>📊 Trade Summary</h3>
+<h3>🕔 5M Chart — Entry Confirmation</h3>
 
-<table style="width:100%;border-collapse:collapse;">
-<tr>
-    <th>Trend</th>
-    <th>Signal</th>
-    <th>Confidence</th>
-</tr>
+<input type="file" id="chart5M" accept="image/*">
 
-<tr>
-    <td id="trendCell">-</td>
-    <td id="signalCell">-</td>
-    <td id="confidenceCell">-</td>
-</tr>
-</table>
+<br><br>
 
-</div>
+<img
+    id="preview5M"
+    style="display:none;max-width:100%;border-radius:10px;"
+>
+
+<br><br>
+
+<button onclick="analyzeChart()">🔍 Analyze</button>
+
+<button onclick="clearResult()">Clear</button>
+
+<hr>
+
+<div id="result"></div>
+
+<h3>📊 Trading Decision</h3>
+
+<div id="signal"></div>
+
+<div id="entry"></div>
+
+<div id="stoploss"></div>
+
+<div id="target"></div>
+
+<div id="rr"></div>
+
+<div id="reason"></div>
+
+
+<!-- IMPORTANT: CONNECT JAVASCRIPT -->
 
 <script src="script.js"></script>
 
