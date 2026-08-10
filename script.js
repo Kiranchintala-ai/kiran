@@ -1,106 +1,167 @@
-// ===============================
+// =====================================
+// CONFIGURATION
+// =====================================
+
+const API_URL =
+    "https://kiran-ai-server.onrender.com";
+
+
+// =====================================
 // CHART PREVIEW
-// ===============================
+// =====================================
 
 function setupPreview(inputId, previewId) {
 
-    document.getElementById(inputId).addEventListener("change", function () {
+    const input =
+        document.getElementById(inputId);
 
-        const file = this.files[0];
+    const preview =
+        document.getElementById(previewId);
 
-        if (!file) return;
+    if (!input || !preview) {
+        return;
+    }
 
-        const preview = document.getElementById(previewId);
+    input.addEventListener(
+        "change",
+        function () {
 
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = "block";
+            const file =
+                this.files[0];
 
-    });
+            if (!file) {
+                return;
+            }
 
+            preview.src =
+                URL.createObjectURL(file);
+
+            preview.style.display =
+                "block";
+        }
+    );
 }
 
 
-// Setup previews
+// =====================================
+// SETUP PREVIEWS
+// =====================================
 
-setupPreview("chart1H", "preview1H");
-setupPreview("chart30M", "preview30M");
-setupPreview("chart5M", "preview5M");
+setupPreview(
+    "chart1H",
+    "preview1H"
+);
+
+setupPreview(
+    "chart30M",
+    "preview30M"
+);
+
+setupPreview(
+    "chart5M",
+    "preview5M"
+);
 
 
-// ===============================
+// =====================================
 // CONVERT IMAGE TO BASE64
-// ===============================
+// =====================================
 
 function getBase64(file) {
 
-    return new Promise((resolve, reject) => {
+    return new Promise(
+        (resolve, reject) => {
 
-        const reader = new FileReader();
+            const reader =
+                new FileReader();
 
-        reader.onload = () => {
+            reader.onload = () => {
 
-            const result = reader.result;
+                const result =
+                    reader.result;
 
-            resolve(result.split(",")[1]);
+                resolve(
+                    result.split(",")[1]
+                );
 
-        };
+            };
 
-        reader.onerror = reject;
+            reader.onerror =
+                reject;
 
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(
+                file
+            );
 
-    });
-
+        }
+    );
 }
 
 
-// ===============================
+// =====================================
 // ANALYZE CHARTS
-// ===============================
+// =====================================
 
 async function analyzeChart() {
 
     const file1H =
-        document.getElementById("chart1H").files[0];
+        document.getElementById(
+            "chart1H"
+        ).files[0];
 
     const file30M =
-        document.getElementById("chart30M").files[0];
+        document.getElementById(
+            "chart30M"
+        ).files[0];
 
     const file5M =
-        document.getElementById("chart5M").files[0];
+        document.getElementById(
+            "chart5M"
+        ).files[0];
 
 
-    // ===============================
+    // =================================
     // CHECK ALL THREE CHARTS
-    // ===============================
+    // =================================
 
-    if (!file1H || !file30M || !file5M) {
+    if (
+        !file1H ||
+        !file30M ||
+        !file5M
+    ) {
 
-        document.getElementById("result").innerHTML =
+        document.getElementById(
+            "result"
+        ).innerHTML =
 
             "<h3 style='color:red'>" +
-            "⚠️ Please upload all 3 charts: 1H, 30M and 5M." +
+
+            "⚠️ Please upload all 3 charts: " +
+
+            "1H, 30M and 5M." +
+
             "</h3>";
 
         return;
-
     }
 
 
-    // ===============================
-    // ANALYZING MESSAGE
-    // ===============================
+    // =================================
+    // SHOW ANALYZING MESSAGE
+    // =================================
 
-    document.getElementById("result").innerHTML =
+    document.getElementById(
+        "result"
+    ).innerHTML =
 
         "<h3>⏳ AI is analyzing 1H + 30M + 5M charts...</h3>";
 
 
     try {
 
-        // ===============================
+        // =============================
         // CONVERT IMAGES
-        // ===============================
+        // =============================
 
         const image1H =
             await getBase64(file1H);
@@ -112,61 +173,93 @@ async function analyzeChart() {
             await getBase64(file5M);
 
 
-        // ===============================
-        // SEND TO NODE SERVER
-        // ===============================
+        // =============================
+        // SEND TO NEW BACKEND
+        // =============================
 
-        const response = await fetch(
+        const response =
+            await fetch(
 
-            "http://10.46.91.207:3000/analyze",
+                API_URL +
+                "/analyze",
 
-            {
+                {
 
-                method: "POST",
+                    method:
+                        "POST",
 
-                headers: {
+                    headers: {
 
-                    "Content-Type":
-                        "application/json"
+                        "Content-Type":
+                            "application/json"
 
-                },
+                    },
 
-                body: JSON.stringify({
+                    body:
+                        JSON.stringify({
 
-                    image1H: image1H,
+                            image1H:
+                                image1H,
 
-                    image30M: image30M,
+                            image30M:
+                                image30M,
 
-                    image5M: image5M
+                            image5M:
+                                image5M
 
-                })
+                        })
 
-            }
+                }
 
-        );
+            );
 
 
-        // ===============================
+        // =============================
+        // CHECK HTTP RESPONSE
+        // =============================
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Server error: " +
+                response.status
+            );
+
+        }
+
+
+        // =============================
         // GET SERVER RESPONSE
-        // ===============================
+        // =============================
 
         const data =
             await response.json();
 
 
-        // ===============================
+        console.log(
+            "AI Response:",
+            data
+        );
+
+
+        // =============================
         // SUCCESS
-        // ===============================
+        // =============================
 
         if (data.success) {
 
 
-            // ===============================
+            // =========================
             // SIGNAL
-            // ===============================
+            // =========================
 
             let signal =
-                data.signal || "NO TRADE";
+                data.signal ||
+                "NO TRADE";
+
+
+            const upperSignal =
+                signal.toUpperCase();
 
 
             let signalColor =
@@ -174,9 +267,8 @@ async function analyzeChart() {
 
 
             if (
-                signal
-                    .toUpperCase()
-                    .includes("BUY")
+                upperSignal ===
+                "BUY"
             ) {
 
                 signalColor =
@@ -185,9 +277,8 @@ async function analyzeChart() {
             }
 
             else if (
-                signal
-                    .toUpperCase()
-                    .includes("SELL")
+                upperSignal ===
+                "SELL"
             ) {
 
                 signalColor =
@@ -196,182 +287,264 @@ async function analyzeChart() {
             }
 
 
-            document.getElementById("signal").innerHTML =
-
-                `<h2 style="
-                    color:${signalColor};
-                    font-size:32px;
-                    margin-bottom:15px;
-                ">
-                    ${signal}
-                </h2>`;
+            const signalElement =
+                document.getElementById(
+                    "signal"
+                );
 
 
-            // ===============================
-            // ENTRY + 5M CANDLE CLOSE RULE
-            // ===============================
+            if (signalElement) {
 
-            if (
-                signal.toUpperCase() === "BUY" ||
-                signal.toUpperCase() === "SELL"
-            ) {
+                signalElement.innerHTML =
 
-                document.getElementById("entry").innerHTML =
-
-                    `<div style="
-                        padding:15px;
+                    `<h2 style="
+                        color:${signalColor};
+                        font-size:32px;
                         margin-bottom:15px;
-                        border:2px solid orange;
-                        border-radius:10px;
-                        background:#fff8e1;
                     ">
-
-                        <h3 style="margin-top:0;">
-                            ⚠️ ENTRY RULE
-                        </h3>
-
-                        <b>
-                            WAIT FOR 5M CANDLE CLOSE
-                        </b>
-
-                        <br><br>
-
-                        Current 5M candle must finish first.
-
-                        <br><br>
-
-                        ✅ If confirmation remains valid
-                        after the candle closes:
-
-                        <br>
-
-                        <b>
-                            ENTER ON THE NEXT 5M CANDLE
-                        </b>
-
-                        <br><br>
-
-                        ❌ If confirmation disappears:
-
-                        <br>
-
-                        <b>
-                            NO TRADE
-                        </b>
-
-                        <hr>
-
-                        <b>Entry:</b>
-                        ${data.entry || "-"}
-
-                    </div>`;
-
-            }
-
-            else {
-
-                document.getElementById("entry").innerHTML =
-
-                    `<div style="
-                        padding:15px;
-                        margin-bottom:15px;
-                        border:2px solid #999;
-                        border-radius:10px;
-                        background:#f5f5f5;
-                    ">
-
-                        <h3 style="margin-top:0;">
-                            🟡 NO TRADE
-                        </h3>
-
-                        No valid entry at this time.
-
-                    </div>`;
+                        ${signal}
+                    </h2>`;
 
             }
 
 
-            // ===============================
+            // =========================
+            // ENTRY
+            // =========================
+
+            const entryElement =
+                document.getElementById(
+                    "entry"
+                );
+
+
+            if (entryElement) {
+
+                if (
+                    upperSignal ===
+                        "BUY" ||
+
+                    upperSignal ===
+                        "SELL"
+                ) {
+
+                    entryElement.innerHTML =
+
+                        `<div style="
+                            padding:15px;
+                            margin-bottom:15px;
+                            border:2px solid orange;
+                            border-radius:10px;
+                            background:#fff8e1;
+                        ">
+
+                            <h3 style="
+                                margin-top:0;
+                            ">
+                                ⚠️ ENTRY RULE
+                            </h3>
+
+                            <b>
+                                WAIT FOR 5M CANDLE CLOSE
+                            </b>
+
+                            <br><br>
+
+                            Current 5M candle
+                            must finish first.
+
+                            <br><br>
+
+                            ✅ If confirmation
+                            remains valid after
+                            the candle closes:
+
+                            <br><br>
+
+                            <b>
+                                ENTER ON THE NEXT
+                                5M CANDLE
+                            </b>
+
+                            <br><br>
+
+                            ❌ If confirmation
+                            disappears:
+
+                            <br><br>
+
+                            <b>
+                                NO TRADE
+                            </b>
+
+                            <hr>
+
+                            <b>AI Entry:</b>
+                            ${data.entry || "-"}
+
+                        </div>`;
+
+                }
+
+                else {
+
+                    entryElement.innerHTML =
+
+                        `<div style="
+                            padding:15px;
+                            margin-bottom:15px;
+                            border:2px solid #999;
+                            border-radius:10px;
+                            background:#f5f5f5;
+                        ">
+
+                            <h3 style="
+                                margin-top:0;
+                            ">
+                                🟡 NO TRADE
+                            </h3>
+
+                            No valid entry
+                            at this time.
+
+                        </div>`;
+
+                }
+
+            }
+
+
+            // =========================
             // STOP LOSS
-            // ===============================
+            // =========================
 
-            document.getElementById("stoploss").innerHTML =
+            const stoplossElement =
+                document.getElementById(
+                    "stoploss"
+                );
 
-                "<b>Stop Loss:</b> " +
 
-                (data.stoploss || "-");
+            if (stoplossElement) {
+
+                stoplossElement.innerHTML =
+
+                    "<b>Stop Loss:</b> " +
+
+                    (
+                        data.stoploss ||
+                        "-"
+                    );
+
+            }
 
 
-            // ===============================
+            // =========================
             // TARGET
-            // ===============================
+            // =========================
 
-            document.getElementById("target").innerHTML =
+            const targetElement =
+                document.getElementById(
+                    "target"
+                );
 
-                "<b>Target:</b> " +
 
-                (data.target || "-");
+            if (targetElement) {
+
+                targetElement.innerHTML =
+
+                    "<b>Target:</b> " +
+
+                    (
+                        data.target ||
+                        "-"
+                    );
+
+            }
 
 
-            // ===============================
-            // RISK : REWARD
-            // ===============================
+            // =========================
+            // RISK REWARD
+            // =========================
 
-            if (
-                document.getElementById("rr")
-            ) {
+            const rrElement =
+                document.getElementById(
+                    "rr"
+                );
 
-                document.getElementById("rr").innerHTML =
+
+            if (rrElement) {
+
+                rrElement.innerHTML =
 
                     "<b>Risk : Reward:</b> " +
 
-                    (data.rr || "-");
+                    (
+                        data.rr ||
+                        "-"
+                    );
 
             }
 
 
-            // ===============================
+            // =========================
             // REASON
-            // ===============================
+            // =========================
 
-            if (
-                document.getElementById("reason")
-            ) {
+            const reasonElement =
+                document.getElementById(
+                    "reason"
+                );
 
-                document.getElementById("reason").innerHTML =
+
+            if (reasonElement) {
+
+                reasonElement.innerHTML =
 
                     "<b>Reason:</b> " +
 
-                    (data.reason || "-");
+                    (
+                        data.reason ||
+                        "-"
+                    );
 
             }
 
 
-            // ===============================
-            // RESULT
-            // ===============================
+            // =========================
+            // ANALYSIS COMPLETE
+            // =========================
 
-            document.getElementById("result").innerHTML =
+            document.getElementById(
+                "result"
+            ).innerHTML =
 
                 "<h3 style='color:green'>" +
+
                 "✅ Analysis Completed" +
+
                 "</h3>";
 
         }
 
 
-        // ===============================
-        // SERVER ERROR
-        // ===============================
+        // =============================
+        // SERVER RETURNED ERROR
+        // =============================
 
         else {
 
-            document.getElementById("result").innerHTML =
+            document.getElementById(
+                "result"
+            ).innerHTML =
 
                 "<h3 style='color:red'>" +
 
-                (data.error ||
-                    "Analysis failed.") +
+                "❌ " +
+
+                (
+                    data.error ||
+                    "Analysis failed."
+                ) +
 
                 "</h3>";
 
@@ -380,19 +553,25 @@ async function analyzeChart() {
     }
 
 
-    // ===============================
-    // CONNECTION / JAVASCRIPT ERROR
-    // ===============================
+    // =================================
+    // CONNECTION ERROR
+    // =================================
 
     catch (err) {
 
-        console.error(err);
+        console.error(
+            "Analysis Error:",
+            err
+        );
 
-        document.getElementById("result").innerHTML =
+        document.getElementById(
+            "result"
+        ).innerHTML =
 
             "<h3 style='color:red'>" +
 
-            "❌ " +
+            "❌ Connection Error: " +
+
             err.message +
 
             "</h3>";
@@ -402,94 +581,156 @@ async function analyzeChart() {
 }
 
 
-// ===============================
+// =====================================
 // CLEAR RESULTS
-// ===============================
+// =====================================
 
 function clearResult() {
 
-
     // Clear status
 
-    document.getElementById("result").innerHTML = "";
+    document.getElementById(
+        "result"
+    ).innerHTML = "";
 
 
     // Clear file inputs
 
-    document.getElementById("chart1H").value = "";
+    document.getElementById(
+        "chart1H"
+    ).value = "";
 
-    document.getElementById("chart30M").value = "";
+    document.getElementById(
+        "chart30M"
+    ).value = "";
 
-    document.getElementById("chart5M").value = "";
+    document.getElementById(
+        "chart5M"
+    ).value = "";
 
 
     // Hide previews
 
-    document.getElementById(
-        "preview1H"
-    ).style.display = "none";
+    const preview1H =
+        document.getElementById(
+            "preview1H"
+        );
+
+    const preview30M =
+        document.getElementById(
+            "preview30M"
+        );
+
+    const preview5M =
+        document.getElementById(
+            "preview5M"
+        );
 
 
-    document.getElementById(
-        "preview30M"
-    ).style.display = "none";
+    if (preview1H) {
+
+        preview1H.style.display =
+            "none";
+
+    }
 
 
-    document.getElementById(
-        "preview5M"
-    ).style.display = "none";
+    if (preview30M) {
+
+        preview30M.style.display =
+            "none";
+
+    }
+
+
+    if (preview5M) {
+
+        preview5M.style.display =
+            "none";
+
+    }
 
 
     // Clear signal
 
-    document.getElementById(
-        "signal"
-    ).innerHTML = "";
+    const signal =
+        document.getElementById(
+            "signal"
+        );
+
+    if (signal) {
+
+        signal.innerHTML = "";
+
+    }
 
 
     // Clear entry
 
-    document.getElementById(
-        "entry"
-    ).innerHTML = "";
+    const entry =
+        document.getElementById(
+            "entry"
+        );
+
+    if (entry) {
+
+        entry.innerHTML = "";
+
+    }
 
 
     // Clear stop loss
 
-    document.getElementById(
-        "stoploss"
-    ).innerHTML = "";
+    const stoploss =
+        document.getElementById(
+            "stoploss"
+        );
+
+    if (stoploss) {
+
+        stoploss.innerHTML = "";
+
+    }
 
 
     // Clear target
 
-    document.getElementById(
-        "target"
-    ).innerHTML = "";
+    const target =
+        document.getElementById(
+            "target"
+        );
+
+    if (target) {
+
+        target.innerHTML = "";
+
+    }
 
 
     // Clear R:R
 
-    if (
-        document.getElementById("rr")
-    ) {
-
+    const rr =
         document.getElementById(
             "rr"
-        ).innerHTML = "";
+        );
+
+    if (rr) {
+
+        rr.innerHTML = "";
 
     }
 
 
     // Clear reason
 
-    if (
-        document.getElementById("reason")
-    ) {
-
+    const reason =
         document.getElementById(
             "reason"
-        ).innerHTML = "";
+        );
+
+    if (reason) {
+
+        reason.innerHTML = "";
 
     }
 
