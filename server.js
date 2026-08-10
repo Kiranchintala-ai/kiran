@@ -9,9 +9,16 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "30mb" }));
 
-// ===============================
+// =====================================
+// CONFIGURATION
+// =====================================
+
+const PORT = process.env.PORT || 3000;
+const MODEL = "gemini-3.6-flash";
+
+// =====================================
 // GEMINI API KEY CHECK
-// ===============================
+// =====================================
 
 if (!process.env.GEMINI_API_KEY) {
     console.error("ERROR: GEMINI_API_KEY is missing in .env");
@@ -22,21 +29,17 @@ const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY
 });
 
-const MODEL = "gemini-3.5-flash-lite";
-
-
-// ===============================
+// =====================================
 // HOME
-// ===============================
+// =====================================
 
 app.get("/", (req, res) => {
     res.send("AI Trading Server Running");
 });
 
-
-// ===============================
+// =====================================
 // HEALTH CHECK
-// ===============================
+// =====================================
 
 app.get("/health", (req, res) => {
     res.json({
@@ -45,53 +48,40 @@ app.get("/health", (req, res) => {
     });
 });
 
-
-// ===============================
+// =====================================
 // TEST AI
-// ===============================
+// =====================================
 
 app.get("/test-ai", async (req, res) => {
 
     try {
 
         const response = await ai.models.generateContent({
-
             model: MODEL,
-
             contents: "Reply with only one word: SUCCESS"
-
         });
 
         res.json({
-
             success: true,
-
             reply: response.text
-
         });
 
-    }
-
-    catch (error) {
+    } catch (error) {
 
         console.error("Test AI Error:", error);
 
         res.status(500).json({
-
             success: false,
-
             error: error.message
-
         });
 
     }
 
 });
 
-
-// ===============================
+// =====================================
 // ANALYZE 3 CHARTS
-// ===============================
+// =====================================
 
 app.post("/analyze", async (req, res) => {
 
@@ -103,31 +93,44 @@ app.post("/analyze", async (req, res) => {
             image5M
         } = req.body;
 
-
-        // ===============================
+        // =================================
         // CHECK IMAGES
-        // ===============================
+        // =================================
 
         if (!image1H || !image30M || !image5M) {
 
             return res.status(400).json({
-
                 success: false,
-
-                error:
-                    "Please provide all 3 charts: 1H, 30M and 5M."
-
+                error: "Please provide all 3 charts: 1H, 30M and 5M."
             });
 
         }
 
+        // =================================
+        // REMOVE DATA URL PREFIX
+        // =================================
 
-        // ===============================
+        const cleanBase64 = (image) => {
+
+            if (typeof image !== "string") {
+                return image;
+            }
+
+            return image.replace(
+                /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
+                ""
+            );
+        };
+
+        const chart1H = cleanBase64(image1H);
+        const chart30M = cleanBase64(image30M);
+        const chart5M = cleanBase64(image5M);
+
+        // =================================
         // AI PROMPT
-        // ===============================
+        // =================================
 
         const prompt = `
-
 You are a disciplined BTC/USD technical-analysis assistant.
 
 The user has provided THREE TradingView charts of the SAME BTC/USD market.
@@ -150,6 +153,9 @@ BUY
 SELL
 NO TRADE
 
+=====================================
+1H — HIGHER TIMEFRAME TREND
+=====================================
 
 Use the 1H chart to determine the higher-timeframe direction.
 
@@ -162,9 +168,9 @@ Check:
 - Lower lows
 - Major support
 - Major resistance
-- Breakout or breakdown
-- Overall market structure
-
+- Breakout
+- Breakdown
+- Market structure
 
 Classify the 1H trend as:
 
@@ -172,6 +178,9 @@ Bullish
 Bearish
 Sideways
 
+=====================================
+30M — PRIMARY SETUP
+=====================================
 
 The 30M chart is the PRIMARY trading timeframe.
 
@@ -188,10 +197,13 @@ Check:
 - Momentum
 - Volume if visible
 - Potential entry area
-- Stop-loss location
+- Logical stop-loss location
 - Target
 - Risk/reward
 
+=====================================
+5M — ENTRY CONFIRMATION
+=====================================
 
 Use the 5M chart ONLY for entry confirmation.
 
@@ -205,11 +217,11 @@ Check:
 - Lower high
 - Entry timing
 
-
 Do NOT use the 5M chart to override a strong higher-timeframe trend without a clear reason.
 
-
-BUY conditions:
+=====================================
+BUY CONDITIONS
+=====================================
 
 Choose BUY only if:
 
@@ -235,8 +247,9 @@ AND
 
 risk/reward is acceptable.
 
-
-SELL conditions:
+=====================================
+SELL CONDITIONS
+=====================================
 
 Choose SELL only if:
 
@@ -262,8 +275,9 @@ AND
 
 risk/reward is acceptable.
 
-
-NO TRADE conditions:
+=====================================
+NO TRADE CONDITIONS
+=====================================
 
 Choose NO TRADE when:
 
@@ -280,10 +294,11 @@ Choose NO TRADE when:
 - Chart information is insufficient
 - Market conditions are too uncertain
 
-
 NO TRADE is a valid and preferred result when there is no high-quality setup.
 
-NEVER force BUY or SELL.
+=====================================
+PRICE RULE
+=====================================
 
 Technical analysis must be based ONLY on the charts provided.
 
@@ -291,10 +306,13 @@ Do not invent price levels.
 
 Do not invent volume if volume is not visible.
 
-If volume is not visible, say:
+If volume is not visible, return:
 
 Volume: Not visible
 
+=====================================
+OUTPUT FORMAT
+=====================================
 
 Return ONLY these lines:
 
@@ -319,114 +337,84 @@ Do not return markdown.
 Do not return a table.
 
 Do not add extra text.
-
 `;
 
+        // =================================
+        // SEND 3 IMAGES TO GEMINI
+        // =================================
 
-        // ===============================
-        // SEND ALL 3 IMAGES TO GEMINI
-        // ===============================
+        const response = await ai.models.generateContent({
 
-        const response =
-            await ai.models.generateContent({
+            model: MODEL,
 
-                model: MODEL,
+            contents: [
 
-                contents: [
+                {
+                    text: "IMAGE 1 — 1H BTC/USD CHART"
+                },
 
-                    {
-                        text:
-                            "IMAGE 1 — 1H BTC/USD CHART"
-                    },
-
-                    {
-                        inlineData: {
-
-                            mimeType: "image/png",
-
-                            data: image1H
-
-                        }
-
-                    },
-
-                    {
-                        text:
-                            "IMAGE 2 — 30M BTC/USD CHART"
-                    },
-
-                    {
-                        inlineData: {
-
-                            mimeType: "image/png",
-
-                            data: image30M
-
-                        }
-
-                    },
-
-                    {
-                        text:
-                            "IMAGE 3 — 5M BTC/USD CHART"
-                    },
-
-                    {
-                        inlineData: {
-
-                            mimeType: "image/png",
-
-                            data: image5M
-
-                        }
-
-                    },
-
-                    {
-                        text: prompt
+                {
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: chart1H
                     }
+                },
 
-                ]
+                {
+                    text: "IMAGE 2 — 30M BTC/USD CHART"
+                },
 
-            });
+                {
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: chart30M
+                    }
+                },
 
+                {
+                    text: "IMAGE 3 — 5M BTC/USD CHART"
+                },
 
-        // ===============================
-        // AI RESPONSE
-        // ===============================
+                {
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: chart5M
+                    }
+                },
 
-        const text = response.text;
+                {
+                    text: prompt
+                }
 
+            ]
+
+        });
+
+        // =================================
+        // GET AI RESPONSE
+        // =================================
+
+        const text = response.text || "";
 
         console.log("");
-
         console.log("=================================");
-
         console.log("AI 3-TIMEFRAME ANALYSIS");
-
         console.log("=================================");
-
         console.log(text);
-
         console.log("=================================");
-
         console.log("");
 
-
-        // ===============================
+        // =================================
         // VALUE EXTRACTOR
-        // ===============================
+        // =================================
 
         const getValue = (label) => {
 
             const regex = new RegExp(
-
                 "^\\s*" +
-                label +
+                label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
                 "\\s*:\\s*(.+)$",
-
                 "im"
-
             );
 
             const match = text.match(regex);
@@ -434,23 +422,18 @@ Do not add extra text.
             return match
                 ? match[1].trim()
                 : "-";
-
         };
 
-
-        // ===============================
-        // FINAL DATA
-        // ===============================
-
-        const signal =
-            getValue("Signal");
-
+        // =================================
+        // FINAL RESPONSE
+        // =================================
 
         res.json({
 
             success: true,
 
-            signal: signal,
+            signal:
+                getValue("Signal"),
 
             entry:
                 getValue("Entry"),
@@ -493,14 +476,9 @@ Do not add extra text.
 
         });
 
-    }
+    } catch (error) {
 
-    catch (error) {
-
-        console.error(
-            "Analyze Error:",
-            error
-        );
+        console.error("Analyze Error:", error);
 
         res.status(500).json({
 
@@ -514,37 +492,23 @@ Do not add extra text.
 
 });
 
-
-// ===============================
+// =====================================
 // START SERVER
-// ===============================
-
-const PORT = process.env.PORT || 3000;
+// =====================================
 
 app.listen(PORT, "0.0.0.0", () => {
 
     console.log("");
-
     console.log("=================================");
-
     console.log("AI TRADING SERVER RUNNING");
-
     console.log("=================================");
-
     console.log("1H = TREND");
-
     console.log("30M = PRIMARY SETUP");
-
     console.log("5M = ENTRY CONFIRMATION");
-
     console.log("SIGNALS = BUY / SELL / NO TRADE");
-
+    console.log("MODEL =", MODEL);
     console.log("=================================");
-
     console.log(`Local:   http://localhost:${PORT}`);
-
     console.log(`Network: http://0.0.0.0:${PORT}`);
-
     console.log("");
-
 });
