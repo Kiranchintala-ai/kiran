@@ -581,7 +581,172 @@ Do not add extra text.
     }
 
 });
+// =====================================
+// 6 MONTH HISTORICAL DATA TEST
+// =====================================
 
+app.get("/backtest-data", async (req, res) => {
+
+    try {
+
+        const resolutions = ["4h", "1h", "30m"];
+
+        const now = Math.floor(Date.now() / 1000);
+
+        // Approximately 6 months
+        const sixMonthsAgo = now - (180 * 24 * 60 * 60);
+
+        const intervalSeconds = {
+            "30m": 30 * 60,
+            "1h": 60 * 60,
+            "4h": 4 * 60 * 60
+        };
+
+        const allData = {};
+
+        for (const resolution of resolutions) {
+
+            const candles = [];
+
+            const step =
+                2000 * intervalSeconds[resolution];
+
+            let batchStart = sixMonthsAgo;
+
+            while (batchStart < now) {
+
+                const batchEnd =
+                    Math.min(
+                        batchStart + step,
+                        now
+                    );
+
+                const url =
+                    "https://api.india.delta.exchange/v2/history/candles" +
+                    `?resolution=${resolution}` +
+                    `&symbol=BTCUSD` +
+                    `&start=${batchStart}` +
+                    `&end=${batchEnd}`;
+
+                const response =
+                    await fetch(url, {
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    });
+
+                if (!response.ok) {
+
+                    throw new Error(
+                        `${resolution} API error: ${response.status}`
+                    );
+
+                }
+
+                const data =
+                    await response.json();
+
+                if (!data.success) {
+
+                    throw new Error(
+                        `${resolution} API returned unsuccessful response`
+                    );
+
+                }
+
+                if (Array.isArray(data.result)) {
+
+                    candles.push(
+                        ...data.result
+                    );
+
+                }
+
+                batchStart =
+                    batchEnd + intervalSeconds[resolution];
+
+            }
+
+            // Remove duplicate candles
+            const unique = new Map();
+
+            for (const candle of candles) {
+
+                unique.set(
+                    candle.time,
+                    candle
+                );
+
+            }
+
+            // Keep only CLOSED candles
+            const closedCandles =
+                Array.from(unique.values())
+                    .filter(candle =>
+                        Number(candle.time) +
+                        intervalSeconds[resolution] <= now
+                    )
+                    .sort(
+                        (a, b) =>
+                            Number(a.time) -
+                            Number(b.time)
+                    );
+
+            allData[resolution] = {
+
+                candles: closedCandles,
+
+                count: closedCandles.length,
+
+                firstTime:
+                    closedCandles.length
+                        ? closedCandles[0].time
+                        : null,
+
+                lastTime:
+                    closedCandles.length
+                        ? closedCandles[
+                            closedCandles.length - 1
+                        ].time
+                        : null
+
+            };
+
+        }
+
+        res.json({
+
+            success: true,
+
+            message:
+                "6-month BTCUSD historical data loaded successfully.",
+
+            symbol: "BTCUSD",
+
+            data: allData
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Backtest Data Error:",
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
 // =====================================
 // START SERVER
 // =====================================
