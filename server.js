@@ -34,7 +34,7 @@ const DELTA_API =
 const SYMBOL = "BTCUSD";
 
 // =====================================
-// GEMINI API KEY
+// GEMINI API
 // =====================================
 
 if (!process.env.GEMINI_API_KEY) {
@@ -50,7 +50,8 @@ const ai = new GoogleGenAI({
 // FRONTEND
 // =====================================
 
-const publicFolder = path.join(__dirname, "public");
+const publicFolder =
+    path.join(__dirname, "public");
 
 if (fs.existsSync(publicFolder)) {
     app.use(express.static(publicFolder));
@@ -62,16 +63,18 @@ if (fs.existsSync(publicFolder)) {
 
 app.get("/", (req, res) => {
 
-    const publicIndex = path.join(
-        __dirname,
-        "public",
-        "index.html"
-    );
+    const publicIndex =
+        path.join(
+            __dirname,
+            "public",
+            "index.html"
+        );
 
-    const rootIndex = path.join(
-        __dirname,
-        "index.html"
-    );
+    const rootIndex =
+        path.join(
+            __dirname,
+            "index.html"
+        );
 
     if (fs.existsSync(publicIndex)) {
         return res.sendFile(publicIndex);
@@ -81,7 +84,9 @@ app.get("/", (req, res) => {
         return res.sendFile(rootIndex);
     }
 
-    res.send("AI Trading Server Running");
+    res.send(
+        "AI Trading Server Running"
+    );
 });
 
 // =====================================
@@ -94,11 +99,13 @@ app.get("/health", (req, res) => {
 
         success: true,
 
-        message: "AI Trading Server is running",
+        message:
+            "AI Trading Server is running",
 
         model: MODEL,
 
-        time: new Date().toISOString()
+        time:
+            new Date().toISOString()
 
     });
 
@@ -126,11 +133,14 @@ app.get("/test-ai", async (req, res) => {
 
             success: true,
 
-            reply: response.text
+            reply:
+                response.text
 
         });
 
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error(
             "Test AI Error:",
@@ -141,7 +151,8 @@ app.get("/test-ai", async (req, res) => {
 
             success: false,
 
-            error: error.message
+            error:
+                error.message
 
         });
 
@@ -150,7 +161,28 @@ app.get("/test-ai", async (req, res) => {
 });
 
 // =====================================
-// ANALYZE 3 CHARTS
+// CLEAN BASE64
+// =====================================
+
+function cleanBase64(image) {
+
+    if (
+        typeof image !== "string"
+    ) {
+
+        return image;
+
+    }
+
+    return image.replace(
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
+        ""
+    );
+
+}
+
+// =====================================
+// IMAGE ANALYSIS
 // =====================================
 
 app.post("/analyze", async (req, res) => {
@@ -163,9 +195,9 @@ app.post("/analyze", async (req, res) => {
             image5M
         } = req.body;
 
-        // =================================
+        // -----------------------------
         // CHECK IMAGES
-        // =================================
+        // -----------------------------
 
         if (
             !image1H ||
@@ -178,30 +210,11 @@ app.post("/analyze", async (req, res) => {
                 success: false,
 
                 error:
-                    "Please provide all 3 charts: 1H, 30M and 5M."
+                    "Please provide 1H, 30M and 5M charts."
 
             });
 
         }
-
-        // =================================
-        // CLEAN BASE64
-        // =================================
-
-        const cleanBase64 = (image) => {
-
-            if (
-                typeof image !== "string"
-            ) {
-                return image;
-            }
-
-            return image.replace(
-                /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
-                ""
-            );
-
-        };
 
         const chart1H =
             cleanBase64(image1H);
@@ -212,161 +225,74 @@ app.post("/analyze", async (req, res) => {
         const chart5M =
             cleanBase64(image5M);
 
-        // =================================
+        // -----------------------------
         // AI PROMPT
-        // =================================
+        // -----------------------------
 
         const prompt = `
 
 You are a disciplined BTC/USD technical-analysis assistant.
 
-The user has provided THREE TradingView charts of the SAME BTC/USD market.
+Three charts are provided:
 
-1H chart = HIGHER-TIMEFRAME TREND
-30M chart = PRIMARY SETUP
-5M chart = ENTRY CONFIRMATION
+1H = higher timeframe trend
+30M = primary setup
+5M = entry confirmation
 
-IMPORTANT:
+Analyze ONLY the charts provided.
 
-Do NOT automatically choose BUY.
+Do not force a trade.
 
-Do NOT automatically choose SELL.
-
-Do NOT force a trade.
-
-The final decision MUST be exactly ONE:
+The final signal must be exactly:
 
 BUY
 SELL
 NO TRADE
 
-Use the 1H chart to determine the higher-timeframe direction.
+BUY requires:
+
+1H reasonably bullish
+30M bullish setup
+5M bullish confirmation
+Logical entry
+Logical stop loss
+Clear target
+
+SELL requires:
+
+1H reasonably bearish
+30M bearish setup
+5M bearish confirmation
+Logical entry
+Logical stop loss
+Clear target
+
+Otherwise choose:
+
+NO TRADE
 
 Check:
 
-- Overall trend
+- Market structure
 - Higher highs
 - Higher lows
 - Lower highs
 - Lower lows
-- Major support
-- Major resistance
-- Breakout
-- Breakdown
-- Market structure
-
-Classify the 1H trend as:
-
-Bullish
-Bearish
-Sideways
-
-The 30M chart is the PRIMARY trading timeframe.
-
-Check:
-
-- Market structure
 - Support
 - Resistance
-- Price action
 - Breakout
 - Breakdown
 - Retest
 - Rejection
 - Momentum
 - Volume if visible
-- Potential entry area
-- Logical stop-loss location
-- Target
-- Risk/reward
-
-Use the 5M chart ONLY for entry confirmation.
-
-Check:
-
-- Confirmation candle
-- Breakout confirmation
-- Rejection
-- Short-term momentum
-- Higher low
-- Lower high
-- Entry timing
-
-Do NOT use the 5M chart to override a strong higher-timeframe trend without a clear reason.
-
-Choose BUY only if:
-
-1H direction is reasonably bullish
-
-AND
-
-30M has a valid bullish setup
-
-AND
-
-5M provides reasonable entry confirmation
-
-AND
-
-logical stop loss exists
-
-AND
-
-target is clear
-
-AND
-
-risk/reward is acceptable.
-
-Choose SELL only if:
-
-1H direction is reasonably bearish
-
-AND
-
-30M has a valid bearish setup
-
-AND
-
-5M provides reasonable entry confirmation
-
-AND
-
-logical stop loss exists
-
-AND
-
-target is clear
-
-AND
-
-risk/reward is acceptable.
-
-Choose NO TRADE when:
-
-- 1H is unclear
-- 30M is unclear
-- 5M confirmation is missing
-- Timeframes conflict
-- Price is in the middle of a range
-- Setup is too late
-- Entry is risky
-- Stop loss cannot be placed logically
-- Target is unclear
-- Risk/reward is poor
-- Chart information is insufficient
-- Market conditions are too uncertain
-
-NO TRADE is a valid and preferred result when there is no high-quality setup.
-
-Technical analysis must be based ONLY on the charts provided.
+- Entry confirmation
 
 Do not invent price levels.
 
-Do not invent volume if volume is not visible.
+Do not invent volume.
 
-If volume is not visible, return:
-
+If volume is not visible, say:
 Volume: Not visible
 
 Return ONLY these lines:
@@ -382,19 +308,23 @@ Price Action: short description
 Momentum: Strong or Weak or Neutral
 Volume: short description or Not visible
 Entry Confirmation: Confirmed or Not confirmed
-Risk Reward: ratio or -
 Reason: short reason
 
-Do not return Confidence.
-Do not return markdown.
-Do not return a table.
-Do not add extra text.
+Do NOT return:
+
+Confidence
+Risk Reward
+EMA values
+Crossover values
+Extra explanation
+Markdown
+Tables
 
 `;
 
-        // =================================
-        // SEND CHARTS TO GEMINI
-        // =================================
+        // -----------------------------
+        // SEND IMAGES TO GEMINI
+        // -----------------------------
 
         const response =
             await ai.models.generateContent({
@@ -411,9 +341,11 @@ Do not add extra text.
                     {
                         inlineData: {
 
-                            mimeType: "image/png",
+                            mimeType:
+                                "image/png",
 
-                            data: chart1H
+                            data:
+                                chart1H
 
                         }
 
@@ -427,9 +359,11 @@ Do not add extra text.
                     {
                         inlineData: {
 
-                            mimeType: "image/png",
+                            mimeType:
+                                "image/png",
 
-                            data: chart30M
+                            data:
+                                chart30M
 
                         }
 
@@ -443,40 +377,47 @@ Do not add extra text.
                     {
                         inlineData: {
 
-                            mimeType: "image/png",
+                            mimeType:
+                                "image/png",
 
-                            data: chart5M
+                            data:
+                                chart5M
 
                         }
 
                     },
 
                     {
-                        text: prompt
+                        text:
+                            prompt
                     }
 
                 ]
 
             });
 
-        // =================================
-        // GET AI RESPONSE
-        // =================================
-
         const text =
             response.text || "";
 
         console.log("");
-        console.log("=================================");
-        console.log("AI 3-TIMEFRAME ANALYSIS");
-        console.log("=================================");
+        console.log(
+            "================================="
+        );
+        console.log(
+            "AI CHART ANALYSIS"
+        );
+        console.log(
+            "================================="
+        );
         console.log(text);
-        console.log("=================================");
+        console.log(
+            "================================="
+        );
         console.log("");
 
-        // =================================
+        // -----------------------------
         // VALUE EXTRACTOR
-        // =================================
+        // -----------------------------
 
         const getValue = (label) => {
 
@@ -500,9 +441,9 @@ Do not add extra text.
 
         };
 
-        // =================================
-        // FINAL RESPONSE
-        // =================================
+        // -----------------------------
+        // RESPONSE
+        // -----------------------------
 
         res.json({
 
@@ -539,10 +480,9 @@ Do not add extra text.
                 getValue("Volume"),
 
             entryConfirmation:
-                getValue("Entry Confirmation"),
-
-            rr:
-                getValue("Risk Reward"),
+                getValue(
+                    "Entry Confirmation"
+                ),
 
             reason:
                 getValue("Reason"),
@@ -552,7 +492,9 @@ Do not add extra text.
 
         });
 
-    } catch (error) {
+    }
+
+    catch (error) {
 
         console.error(
             "Analyze Error:",
@@ -563,7 +505,8 @@ Do not add extra text.
 
             success: false,
 
-            error: error.message
+            error:
+                error.message
 
         });
 
@@ -572,8 +515,24 @@ Do not add extra text.
 });
 
 // =====================================
-// BACKTEST HELPER FUNCTIONS
+// CANDLE INTERVALS
 // =====================================
+
+const LIVE_INTERVALS = {
+
+    "5m":
+        5 * 60,
+
+    "30m":
+        30 * 60,
+
+    "1h":
+        60 * 60,
+
+    "4h":
+        4 * 60 * 60
+
+};
 
 // =====================================
 // NORMALIZE CANDLE
@@ -583,15 +542,20 @@ function normalizeCandle(candle) {
 
     return {
 
-        time: Number(candle.time),
+        time:
+            Number(candle.time),
 
-        open: Number(candle.open),
+        open:
+            Number(candle.open),
 
-        high: Number(candle.high),
+        high:
+            Number(candle.high),
 
-        low: Number(candle.low),
+        low:
+            Number(candle.low),
 
-        close: Number(candle.close)
+        close:
+            Number(candle.close)
 
     };
 
@@ -601,7 +565,10 @@ function normalizeCandle(candle) {
 // EMA CALCULATOR
 // =====================================
 
-function calculateEMA(candles, period) {
+function calculateEMA(
+    candles,
+    period
+) {
 
     if (
         !Array.isArray(candles) ||
@@ -613,13 +580,11 @@ function calculateEMA(candles, period) {
     }
 
     const emaValues =
-        new Array(candles.length).fill(null);
+        new Array(
+            candles.length
+        ).fill(null);
 
     let sum = 0;
-
-    // =================================
-    // FIRST EMA = SMA
-    // =================================
 
     for (
         let i = 0;
@@ -627,26 +592,22 @@ function calculateEMA(candles, period) {
         i++
     ) {
 
-        sum += candles[i].close;
+        sum +=
+            candles[i].close;
 
     }
 
     let previousEMA =
         sum / period;
 
-    emaValues[period - 1] =
+    emaValues[
+        period - 1
+    ] =
         previousEMA;
 
-    // =================================
-    // EMA MULTIPLIER
-    // =================================
-
     const multiplier =
-        2 / (period + 1);
-
-    // =================================
-    // CONTINUE EMA
-    // =================================
+        2 /
+        (period + 1);
 
     for (
         let i = period;
@@ -678,103 +639,20 @@ function calculateEMA(candles, period) {
 }
 
 // =====================================
-// FIND LAST CLOSED CANDLE
+// GET RECENT CANDLES
 // =====================================
 
-function findLastClosedCandle(
-    candles,
-    targetCloseTime
-) {
-
-    let left = 0;
-
-    let right =
-        candles.length - 1;
-
-    let answer = -1;
-
-    while (
-        left <= right
-    ) {
-
-        const middle =
-            Math.floor(
-                (left + right) / 2
-            );
-
-        const candle =
-            candles[middle];
-
-        const candleCloseTime =
-            candle.time +
-            candle.intervalSeconds;
-
-        if (
-            candleCloseTime <=
-            targetCloseTime
-        ) {
-
-            answer =
-                middle;
-
-            left =
-                middle + 1;
-
-        } else {
-
-            right =
-                middle - 1;
-
-        }
-
-    }
-
-    return answer;
-
-}
-
-// =====================================
-// SLEEP
-// =====================================
-
-function sleep(ms) {
-
-    return new Promise(
-        resolve =>
-            setTimeout(
-                resolve,
-                ms
-            )
-    );
-
-}
-
-// =====================================
-// DOWNLOAD DELTA CANDLES
-// =====================================
-
-async function downloadDeltaCandles(
+async function getRecentCandles(
     resolution,
-    startTime,
-    endTime
+    count = 100
 ) {
 
-    const intervalSeconds = {
+    const intervalSeconds =
+        LIVE_INTERVALS[
+            resolution
+        ];
 
-        "30m":
-            30 * 60,
-
-        "1h":
-            60 * 60,
-
-        "4h":
-            4 * 60 * 60
-
-    };
-
-    if (
-        !intervalSeconds[resolution]
-    ) {
+    if (!intervalSeconds) {
 
         throw new Error(
             `Unsupported resolution: ${resolution}`
@@ -782,2501 +660,595 @@ async function downloadDeltaCandles(
 
     }
 
-    // =================================
-    // DELTA LIMIT
-    // =================================
-
-    const candlesPerRequest =
-        2000;
-
-    const step =
-        candlesPerRequest *
-        intervalSeconds[resolution];
-
-    const candles = [];
-
-    let batchStart =
-        startTime;
-
-    let requestCount = 0;
-
-    // =================================
-    // DOWNLOAD IN BATCHES
-    // =================================
-
-    while (
-        batchStart < endTime
-    ) {
-
-        const batchEnd =
-            Math.min(
-                batchStart + step,
-                endTime
-            );
-
-        const url =
-            DELTA_API +
-            `?resolution=${encodeURIComponent(resolution)}` +
-            `&symbol=${encodeURIComponent(SYMBOL)}` +
-            `&start=${batchStart}` +
-            `&end=${batchEnd}`;
-
-        console.log(
-            `Downloading ${resolution}: ` +
-            `${new Date(batchStart * 1000).toISOString()} -> ` +
-            `${new Date(batchEnd * 1000).toISOString()}`
+    const now =
+        Math.floor(
+            Date.now() / 1000
         );
 
-        const response =
-            await fetch(
-                url,
-                {
-                    headers: {
-                        "Accept":
-                            "application/json"
-                    }
+    const start =
+        now -
+        (
+            count *
+            intervalSeconds
+        );
+
+    const url =
+        DELTA_API +
+        `?resolution=${encodeURIComponent(
+            resolution
+        )}` +
+        `&symbol=${encodeURIComponent(
+            SYMBOL
+        )}` +
+        `&start=${start}` +
+        `&end=${now}`;
+
+    const response =
+        await fetch(
+            url,
+            {
+                headers: {
+                    Accept:
+                        "application/json"
                 }
-            );
-
-        if (!response.ok) {
-
-            const errorText =
-                await response.text();
-
-            throw new Error(
-                `${resolution} API error ${response.status}: ${errorText}`
-            );
-
-        }
-
-        const data =
-            await response.json();
-
-        if (
-            data.success === false
-        ) {
-
-            throw new Error(
-                `${resolution} API returned unsuccessful response`
-            );
-
-        }
-
-        if (
-            Array.isArray(data.result)
-        ) {
-
-            for (
-                const candle
-                of data.result
-            ) {
-
-                candles.push(
-                    normalizeCandle(
-                        candle
-                    )
-                );
-
             }
+        );
 
-        }
+    if (!response.ok) {
 
-        requestCount++;
+        const errorText =
+            await response.text();
 
-        // =================================
-        // MOVE TO NEXT BATCH
-        // =================================
-
-        batchStart =
-            batchEnd +
-            intervalSeconds[resolution];
-
-        // =================================
-        // RATE LIMIT PROTECTION
-        // =================================
-
-        if (
-            batchStart < endTime
-        ) {
-
-            await sleep(150);
-
-        }
+        throw new Error(
+            `${resolution} API error ${response.status}: ${errorText}`
+        );
 
     }
 
-    // =================================
-    // REMOVE DUPLICATES
-    // =================================
+    const data =
+        await response.json();
 
-    const unique =
-        new Map();
+    if (
+        !Array.isArray(
+            data.result
+        )
+    ) {
+
+        throw new Error(
+            `${resolution}: candle data not available`
+        );
+
+    }
+
+    const candles =
+        data.result
+            .map(normalizeCandle)
+            .sort(
+                (a, b) =>
+                    a.time - b.time
+            );
 
     for (
         const candle
         of candles
     ) {
 
-        unique.set(
-            candle.time,
-            candle
-        );
-
-    }
-
-    // =================================
-    // SORT
-    // =================================
-
-    const cleaned =
-        Array.from(
-            unique.values()
-        )
-        .sort(
-            (a, b) =>
-                a.time - b.time
-        );
-
-    // =================================
-    // ADD INTERVAL
-    // =================================
-
-    for (
-        const candle
-        of cleaned
-    ) {
-
         candle.intervalSeconds =
-            intervalSeconds[
-                resolution
-            ];
+            intervalSeconds;
 
     }
 
-    console.log(
-        `${resolution}: ${cleaned.length} candles downloaded using ${requestCount} requests`
-    );
-
-    return cleaned;
+    return candles;
 
 }
 
 // =====================================
-// CALCULATE TRADE RESULT
+// LAST CLOSED CANDLE
 // =====================================
 
-function calculateTradeResult(
-    direction,
-    entry,
-    stopLoss,
-    candlesAfterEntry,
-    rr
+function getLastClosedCandle(
+    candles
 ) {
 
-    const risk =
-        direction === "BUY"
-            ? entry - stopLoss
-            : stopLoss - entry;
-
     if (
-        !Number.isFinite(risk) ||
-        risk <= 0
+        !candles.length
     ) {
 
-        return {
-
-            result:
-                "INVALID",
-
-            r: 0
-
-        };
+        return null;
 
     }
 
-    const target =
-        direction === "BUY"
-            ? entry + risk * rr
-            : entry - risk * rr;
-
-    let result =
-        "OPEN";
-
-    let exitPrice =
-        null;
-
-    let exitTime =
-        null;
-
-    // =================================
-    // CHECK FUTURE CANDLES
-    // =================================
+    const now =
+        Math.floor(
+            Date.now() / 1000
+        );
 
     for (
-        const candle
-        of candlesAfterEntry
+        let i =
+            candles.length - 1;
+        i >= 0;
+        i--
     ) {
 
-        // =================================
-        // BUY
-        // =================================
+        const candle =
+            candles[i];
 
         if (
-            direction === "BUY"
+            candle.time +
+            candle.intervalSeconds
+            <= now
         ) {
 
-            const hitSL =
-                candle.low <=
-                stopLoss;
+            return {
 
-            const hitTP =
-                candle.high >=
-                target;
+                candle,
 
-            // =================================
-            // BOTH HIT
-            // CONSERVATIVE = LOSS
-            // =================================
-
-            if (
-                hitSL &&
-                hitTP
-            ) {
-
-                result =
-                    "LOSS";
-
-                exitPrice =
-                    stopLoss;
-
-                exitTime =
-                    candle.time;
-
-                break;
-
-            }
-
-            // =================================
-            // SL
-            // =================================
-
-            if (
-                hitSL
-            ) {
-
-                result =
-                    "LOSS";
-
-                exitPrice =
-                    stopLoss;
-
-                exitTime =
-                    candle.time;
-
-                break;
-
-            }
-
-            // =================================
-            // TP
-            // =================================
-
-            if (
-                hitTP
-            ) {
-
-                result =
-                    "WIN";
-
-                exitPrice =
-                    target;
-
-                exitTime =
-                    candle.time;
-
-                break;
-
-            }
-
-        }
-
-        // =================================
-        // SELL
-        // =================================
-
-        else {
-
-            const hitSL =
-                candle.high >=
-                stopLoss;
-
-            const hitTP =
-                candle.low <=
-                target;
-
-            // =================================
-            // BOTH HIT
-            // CONSERVATIVE = LOSS
-            // =================================
-
-            if (
-                hitSL &&
-                hitTP
-            ) {
-
-                result =
-                    "LOSS";
-
-                exitPrice =
-                    stopLoss;
-
-                exitTime =
-                    candle.time;
-
-                break;
-
-            }
-
-            // =================================
-            // SL
-            // =================================
-
-            if (
-                hitSL
-            ) {
-
-                result =
-                    "LOSS";
-
-                exitPrice =
-                    stopLoss;
-
-                exitTime =
-                    candle.time;
-
-                break;
-
-            }
-
-            // =================================
-            // TP
-            // =================================
-
-            if (
-                hitTP
-            ) {
-
-                result =
-                    "WIN";
-
-                exitPrice =
-                    target;
-
-                exitTime =
-                    candle.time;
-
-                break;
-
-            }
-
-        }
-
-    }
-
-    // =================================
-    // WIN
-    // =================================
-
-    if (
-        result === "WIN"
-    ) {
-
-        return {
-
-            result:
-                "WIN",
-
-            r:
-                rr,
-
-            exitPrice,
-
-            exitTime
-
-        };
-
-    }
-
-    // =================================
-    // LOSS
-    // =================================
-
-    if (
-        result === "LOSS"
-    ) {
-
-        return {
-
-            result:
-                "LOSS",
-
-            r:
-                -1,
-
-            exitPrice,
-
-            exitTime
-
-        };
-
-    }
-
-    // =================================
-    // STILL OPEN
-    // =================================
-
-    return {
-
-        result:
-            "OPEN",
-
-        r:
-            0,
-
-        exitPrice:
-            null,
-
-        exitTime:
-            null
-
-    };
-
-}
-
-// =====================================
-// 5-YEAR BACKTEST FUNCTION
-// =====================================
-
-async function runFiveYearBacktest(
-    req,
-    res
-) {
-
-    const startedAt =
-        Date.now();
-
-    try {
-
-        console.log("");
-
-        console.log(
-            "================================="
-        );
-
-        console.log(
-            "STARTING 5-YEAR BTCUSD BACKTEST"
-        );
-
-        console.log(
-            "================================="
-        );
-
-        const now =
-            Math.floor(
-                Date.now() / 1000
-            );
-
-        const fiveYearsAgo =
-            now -
-            (
-                5 *
-                365 *
-                24 *
-                60 *
-                60
-            );
-
-        // =================================
-        // DOWNLOAD 30M
-        // =================================
-
-        console.log(
-            "STEP 1/3: DOWNLOADING 30M DATA"
-        );
-
-        const candles30m =
-            await downloadDeltaCandles(
-                "30m",
-                fiveYearsAgo,
-                now
-            );
-
-        // =================================
-        // DOWNLOAD 1H
-        // =================================
-
-        console.log(
-            "STEP 2/3: DOWNLOADING 1H DATA"
-        );
-
-        const candles1h =
-            await downloadDeltaCandles(
-                "1h",
-                fiveYearsAgo,
-                now
-            );
-
-        // =================================
-        // DOWNLOAD 4H
-        // =================================
-
-        console.log(
-            "STEP 3/3: DOWNLOADING 4H DATA"
-        );
-
-        const candles4h =
-            await downloadDeltaCandles(
-                "4h",
-                fiveYearsAgo,
-                now
-            );
-
-        // =================================
-        // CHECK DATA
-        // =================================
-
-        if (
-            candles30m.length < 100 ||
-            candles1h.length < 100 ||
-            candles4h.length < 100
-        ) {
-
-            throw new Error(
-                "Not enough historical candles were downloaded."
-            );
-
-        }
-
-        // =================================
-        // EMA 9 / 26
-        // =================================
-
-        console.log(
-            "CALCULATING EMA 9/26..."
-        );
-
-        const ema30m9 =
-            calculateEMA(
-                candles30m,
-                9
-            );
-
-        const ema30m26 =
-            calculateEMA(
-                candles30m,
-                26
-            );
-
-        const ema1h9 =
-            calculateEMA(
-                candles1h,
-                9
-            );
-
-        const ema1h26 =
-            calculateEMA(
-                candles1h,
-                26
-            );
-
-        const ema4h9 =
-            calculateEMA(
-                candles4h,
-                9
-            );
-
-        const ema4h26 =
-            calculateEMA(
-                candles4h,
-                26
-            );
-
-        // =================================
-        // RR VALUES
-        // =================================
-
-        const rrValues = [
-            1,
-            1.5,
-            2,
-            2.5,
-            3
-        ];
-
-        // =================================
-        // RESULTS STORAGE
-        // =================================
-
-        const results = {};
-
-        for (
-            const rr
-            of rrValues
-        ) {
-
-            results[String(rr)] = {
-
-                total:
-                    0,
-
-                buy: {
-
-                    trades:
-                        0,
-
-                    wins:
-                        0,
-
-                    losses:
-                        0,
-
-                    open:
-                        0,
-
-                    netR:
-                        0
-
-                },
-
-                sell: {
-
-                    trades:
-                        0,
-
-                    wins:
-                        0,
-
-                    losses:
-                        0,
-
-                    open:
-                        0,
-
-                    netR:
-                        0
-
-                }
+                index: i
 
             };
 
         }
 
-        // =================================
-        // YEARLY RESULTS
-        // =================================
+    }
 
-        const yearly = {};
+    return null;
 
-        // =================================
-        // TRADE LIST
-        // =================================
+}
 
-        const trades = [];
+// =====================================
+// LIVE BTC/USD ANALYSIS
+// =====================================
 
-        // =================================
-        // SCAN 30M CROSSOVERS
-        // =================================
+app.get(
+    "/live-analysis",
+    async (req, res) => {
 
-        console.log(
-            "SCANNING 30M EMA CROSSOVERS..."
-        );
+        try {
 
-        for (
-            let i = 26;
-            i < candles30m.length - 1;
-            i++
-        ) {
+            console.log("");
+            console.log(
+                "================================="
+            );
+            console.log(
+                "LIVE BTC/USD ANALYSIS"
+            );
+            console.log(
+                "================================="
+            );
 
-            const previousEMA9 =
-                ema30m9[i - 1];
+            // -----------------------------
+            // DOWNLOAD CANDLES
+            // -----------------------------
 
-            const previousEMA26 =
-                ema30m26[i - 1];
+            const candles5m =
+                await getRecentCandles(
+                    "5m",
+                    100
+                );
 
-            const currentEMA9 =
-                ema30m9[i];
+            const candles30m =
+                await getRecentCandles(
+                    "30m",
+                    100
+                );
 
-            const currentEMA26 =
-                ema30m26[i];
+            const candles1h =
+                await getRecentCandles(
+                    "1h",
+                    100
+                );
+
+            const candles4h =
+                await getRecentCandles(
+                    "4h",
+                    100
+                );
 
             if (
-                previousEMA9 === null ||
-                previousEMA26 === null ||
-                currentEMA9 === null ||
-                currentEMA26 === null
+                candles5m.length < 30 ||
+                candles30m.length < 30 ||
+                candles1h.length < 30 ||
+                candles4h.length < 30
             ) {
 
-                continue;
+                throw new Error(
+                    "Not enough candle data."
+                );
 
             }
 
-            // =================================
-            // DIRECTION
-            // =================================
+            // -----------------------------
+            // EMA
+            // -----------------------------
 
-            let direction =
+            const ema5m9 =
+                calculateEMA(
+                    candles5m,
+                    9
+                );
+
+            const ema5m26 =
+                calculateEMA(
+                    candles5m,
+                    26
+                );
+
+            const ema30m9 =
+                calculateEMA(
+                    candles30m,
+                    9
+                );
+
+            const ema30m26 =
+                calculateEMA(
+                    candles30m,
+                    26
+                );
+
+            const ema1h9 =
+                calculateEMA(
+                    candles1h,
+                    9
+                );
+
+            const ema1h26 =
+                calculateEMA(
+                    candles1h,
+                    26
+                );
+
+            const ema4h9 =
+                calculateEMA(
+                    candles4h,
+                    9
+                );
+
+            const ema4h26 =
+                calculateEMA(
+                    candles4h,
+                    26
+                );
+
+            // -----------------------------
+            // CLOSED CANDLES
+            // -----------------------------
+
+            const closed5m =
+                getLastClosedCandle(
+                    candles5m
+                );
+
+            const closed30m =
+                getLastClosedCandle(
+                    candles30m
+                );
+
+            const closed1h =
+                getLastClosedCandle(
+                    candles1h
+                );
+
+            const closed4h =
+                getLastClosedCandle(
+                    candles4h
+                );
+
+            if (
+                !closed5m ||
+                !closed30m ||
+                !closed1h ||
+                !closed4h
+            ) {
+
+                throw new Error(
+                    "Not enough closed candles."
+                );
+
+            }
+
+            const i5 =
+                closed5m.index;
+
+            const i30 =
+                closed30m.index;
+
+            const i1 =
+                closed1h.index;
+
+            const i4 =
+                closed4h.index;
+
+            // -----------------------------
+            // HIGHER TIMEFRAME TREND
+            // -----------------------------
+
+            const trend4h =
+                ema4h9[i4] >
+                ema4h26[i4]
+                    ? "BULLISH"
+                    : "BEARISH";
+
+            const trend1h =
+                ema1h9[i1] >
+                ema1h26[i1]
+                    ? "BULLISH"
+                    : "BEARISH";
+
+            // -----------------------------
+            // 30M CROSSOVER
+            // -----------------------------
+
+            let crossover =
+                "NONE";
+
+            if (
+                i30 >= 1 &&
+                ema30m9[i30 - 1] <=
+                ema30m26[i30 - 1] &&
+                ema30m9[i30] >
+                ema30m26[i30]
+            ) {
+
+                crossover =
+                    "BULLISH";
+
+            }
+
+            if (
+                i30 >= 1 &&
+                ema30m9[i30 - 1] >=
+                ema30m26[i30 - 1] &&
+                ema30m9[i30] <
+                ema30m26[i30]
+            ) {
+
+                crossover =
+                    "BEARISH";
+
+            }
+
+            // -----------------------------
+            // 5M CONFIRMATION
+            // -----------------------------
+
+            let confirmation =
+                "NOT CONFIRMED";
+
+            if (
+                ema5m9[i5] >
+                ema5m26[i5] &&
+                trend4h ===
+                    "BULLISH" &&
+                trend1h ===
+                    "BULLISH" &&
+                ema30m9[i30] >
+                ema30m26[i30]
+            ) {
+
+                confirmation =
+                    "BULLISH";
+
+            }
+
+            if (
+                ema5m9[i5] <
+                ema5m26[i5] &&
+                trend4h ===
+                    "BEARISH" &&
+                trend1h ===
+                    "BEARISH" &&
+                ema30m9[i30] <
+                ema30m26[i30]
+            ) {
+
+                confirmation =
+                    "BEARISH";
+
+            }
+
+            // -----------------------------
+            // FINAL SIGNAL
+            // -----------------------------
+
+            let signal =
+                "NO TRADE";
+
+            if (
+                trend4h ===
+                    "BULLISH" &&
+                trend1h ===
+                    "BULLISH" &&
+                crossover ===
+                    "BULLISH" &&
+                confirmation ===
+                    "BULLISH"
+            ) {
+
+                signal =
+                    "BUY";
+
+            }
+
+            if (
+                trend4h ===
+                    "BEARISH" &&
+                trend1h ===
+                    "BEARISH" &&
+                crossover ===
+                    "BEARISH" &&
+                confirmation ===
+                    "BEARISH"
+            ) {
+
+                signal =
+                    "SELL";
+
+            }
+
+            // -----------------------------
+            // CURRENT PRICE
+            // -----------------------------
+
+            const price =
+                candles5m[
+                    candles5m.length - 1
+                ].close;
+
+            // -----------------------------
+            // SUPPORT / RESISTANCE
+            // -----------------------------
+
+            const recent30 =
+                candles30m.slice(-20);
+
+            const support =
+                Math.min(
+                    ...recent30.map(
+                        candle =>
+                            candle.low
+                    )
+                );
+
+            const resistance =
+                Math.max(
+                    ...recent30.map(
+                        candle =>
+                            candle.high
+                    )
+                );
+
+            // -----------------------------
+            // ENTRY / SL / TARGET
+            // -----------------------------
+
+            let entry =
                 null;
 
-            // =================================
-            // BUY CROSSOVER
-            // =================================
+            let stopLoss =
+                null;
+
+            let target =
+                null;
+
+            let reason =
+                "";
 
             if (
-                previousEMA9 <=
-                previousEMA26 &&
-                currentEMA9 >
-                currentEMA26
+                signal ===
+                "BUY"
             ) {
 
-                direction =
-                    "BUY";
-
-            }
-
-            // =================================
-            // SELL CROSSOVER
-            // =================================
-
-            if (
-                previousEMA9 >=
-                previousEMA26 &&
-                currentEMA9 <
-                currentEMA26
-            ) {
-
-                direction =
-                    "SELL";
-
-            }
-
-            if (
-                !direction
-            ) {
-
-                continue;
-
-            }
-
-            // =================================
-            // SIGNAL CANDLE
-            // =================================
-
-            const signalCandle =
-                candles30m[i];
-
-            const signalCloseTime =
-                signalCandle.time +
-                signalCandle.intervalSeconds;
-
-            // =================================
-            // FIND 4H TREND
-            // =================================
-
-            const index4h =
-                findLastClosedCandle(
-                    candles4h,
-                    signalCloseTime
-                );
-
-            // =================================
-            // FIND 1H TREND
-            // =================================
-
-            const index1h =
-                findLastClosedCandle(
-                    candles1h,
-                    signalCloseTime
-                );
-
-            if (
-                index4h < 26 ||
-                index1h < 26
-            ) {
-
-                continue;
-
-            }
-
-            // =================================
-            // 4H TREND
-            // =================================
-
-            const trend4h =
-                ema4h9[index4h] >
-                ema4h26[index4h]
-                    ? "BULLISH"
-                    : "BEARISH";
-
-            // =================================
-            // 1H TREND
-            // =================================
-
-            const trend1h =
-                ema1h9[index1h] >
-                ema1h26[index1h]
-                    ? "BULLISH"
-                    : "BEARISH";
-
-            // =================================
-            // BUY FILTER
-            // =================================
-
-            if (
-                direction === "BUY" &&
-                (
-                    trend4h !== "BULLISH" ||
-                    trend1h !== "BULLISH"
-                )
-            ) {
-
-                continue;
-
-            }
-
-            // =================================
-            // SELL FILTER
-            // =================================
-
-            if (
-                direction === "SELL" &&
-                (
-                    trend4h !== "BEARISH" ||
-                    trend1h !== "BEARISH"
-                )
-            ) {
-
-                continue;
-
-            }
-
-            // =================================
-            // ENTRY = NEXT 30M OPEN
-            // =================================
-
-            const entryIndex =
-                i + 1;
-
-            if (
-                entryIndex >=
-                candles30m.length
-            ) {
-
-                continue;
-
-            }
-
-            const entryCandle =
-                candles30m[
-                    entryIndex
-                ];
-
-            const entry =
-                entryCandle.open;
-
-            // =================================
-            // STOP LOSS
-            // =================================
-
-            let stopLoss;
-
-            if (
-                direction === "BUY"
-            ) {
+                entry =
+                    price;
 
                 stopLoss =
-                    signalCandle.low;
+                    support;
 
-            } else {
-
-                stopLoss =
-                    signalCandle.high;
-
-            }
-
-            // =================================
-            // RISK
-            // =================================
-
-            const risk =
-                direction === "BUY"
-                    ? entry - stopLoss
-                    : stopLoss - entry;
-
-            if (
-                !Number.isFinite(risk) ||
-                risk <= 0
-            ) {
-
-                continue;
-
-            }
-
-            // =================================
-            // FUTURE CANDLES
-            // =================================
-
-            const futureCandles =
-                candles30m.slice(
-                    entryIndex
-                );
-
-            // =================================
-            // TRADE RECORD
-            // =================================
-
-            const tradeRecord = {
-
-                time:
-                    signalCandle.time,
-
-                date:
-                    new Date(
-                        signalCandle.time *
-                        1000
-                    ).toISOString(),
-
-                direction,
-
-                entry,
-
-                stopLoss,
-
-                risk,
-
-                trend4h,
-
-                trend1h,
-
-                rr: {}
-
-            };
-
-            // =================================
-            // TEST ALL RR
-            // =================================
-
-            for (
-                const rr
-                of rrValues
-            ) {
-
-                const result =
-                    calculateTradeResult(
-                        direction,
-                        entry,
-                        stopLoss,
-                        futureCandles,
-                        rr
-                    );
-
-                const bucket =
-                    results[
-                        String(rr)
-                    ];
-
-                bucket.total++;
-
-                // =================================
-                // BUY TRADE
-                // =================================
+                const risk =
+                    entry -
+                    stopLoss;
 
                 if (
-                    direction === "BUY"
+                    risk > 0
                 ) {
 
-                    bucket.buy.trades++;
+                    target =
+                        entry +
+                        risk * 2;
+
+                    reason =
+                        "4H and 1H bullish, 30M bullish crossover and 5M confirmation.";
 
                 }
-
-                // =================================
-                // SELL TRADE
-                // =================================
 
                 else {
 
-                    bucket.sell.trades++;
+                    signal =
+                        "NO TRADE";
+
+                    entry =
+                        null;
+
+                    stopLoss =
+                        null;
+
+                    target =
+                        null;
+
+                    reason =
+                        "Bullish conditions exist but a logical stop loss is not available.";
 
                 }
 
-                // =================================
-                // WIN
-                // =================================
+            }
+
+            else if (
+                signal ===
+                "SELL"
+            ) {
+
+                entry =
+                    price;
+
+                stopLoss =
+                    resistance;
+
+                const risk =
+                    stopLoss -
+                    entry;
 
                 if (
-                    result.result ===
-                    "WIN"
+                    risk > 0
                 ) {
 
-                    if (
-                        direction ===
-                        "BUY"
-                    ) {
+                    target =
+                        entry -
+                        risk * 2;
 
-                        bucket.buy.wins++;
-
-                        bucket.buy.netR +=
-                            result.r;
-
-                    } else {
-
-                        bucket.sell.wins++;
-
-                        bucket.sell.netR +=
-                            result.r;
-
-                    }
+                    reason =
+                        "4H and 1H bearish, 30M bearish crossover and 5M confirmation.";
 
                 }
-
-                // =================================
-                // LOSS
-                // =================================
-
-                else if (
-                    result.result ===
-                    "LOSS"
-                ) {
-
-                    if (
-                        direction ===
-                        "BUY"
-                    ) {
-
-                        bucket.buy.losses++;
-
-                        bucket.buy.netR +=
-                            result.r;
-
-                    } else {
-
-                        bucket.sell.losses++;
-
-                        bucket.sell.netR +=
-                            result.r;
-
-                    }
-
-                }
-
-                // =================================
-                // OPEN
-                // =================================
 
                 else {
 
-                    if (
-                        direction ===
-                        "BUY"
-                    ) {
+                    signal =
+                        "NO TRADE";
 
-                        bucket.buy.open++;
+                    entry =
+                        null;
 
-                    } else {
+                    stopLoss =
+                        null;
 
-                        bucket.sell.open++;
+                    target =
+                        null;
 
-                    }
-
-                }
-
-                // =================================
-                // STORE TRADE RESULT
-                // =================================
-
-                tradeRecord.rr[
-                    String(rr)
-                ] = {
-
-                    result:
-                        result.result,
-
-                    r:
-                        result.r,
-
-                    exitPrice:
-                        result.exitPrice,
-
-                    exitTime:
-                        result.exitTime
-
-                };
-
-            }
-
-            trades.push(
-                tradeRecord
-            );
-
-        }
-
-        // =================================
-        // YEARLY AGGREGATION
-        // =================================
-
-        for (
-            const trade
-            of trades
-        ) {
-
-            const year =
-                new Date(
-                    trade.time *
-                    1000
-                ).getUTCFullYear();
-
-            if (
-                !yearly[year]
-            ) {
-
-                yearly[year] = {};
-
-                for (
-                    const rr
-                    of rrValues
-                ) {
-
-                    yearly[year][
-                        String(rr)
-                    ] = {
-
-                        total:
-                            0,
-
-                        buy: {
-
-                            wins:
-                                0,
-
-                            losses:
-                                0,
-
-                            open:
-                                0,
-
-                            netR:
-                                0
-
-                        },
-
-                        sell: {
-
-                            wins:
-                                0,
-
-                            losses:
-                                0,
-
-                            open:
-                                0,
-
-                            netR:
-                                0
-
-                        }
-
-                    };
+                    reason =
+                        "Bearish conditions exist but a logical stop loss is not available.";
 
                 }
 
             }
 
-            for (
-                const rr
-                of rrValues
-            ) {
+            else {
 
-                const result =
-                    trade.rr[
-                        String(rr)
-                    ];
-
-                const bucket =
-                    yearly[year][
-                        String(rr)
-                    ];
-
-                const side =
-                    trade.direction
-                        .toLowerCase();
-
-                bucket.total++;
-
-                if (
-                    result.result ===
-                    "OPEN"
-                ) {
-
-                    bucket[
-                        side
-                    ].open++;
-
-                }
-
-                if (
-                    result.result ===
-                    "WIN"
-                ) {
-
-                    bucket[
-                        side
-                    ].wins++;
-
-                    bucket[
-                        side
-                    ].netR +=
-                        result.r;
-
-                }
-
-                if (
-                    result.result ===
-                    "LOSS"
-                ) {
-
-                    bucket[
-                        side
-                    ].losses++;
-
-                    bucket[
-                        side
-                    ].netR +=
-                        result.r;
-
-                }
+                reason =
+                    "No complete multi-timeframe setup is confirmed.";
 
             }
 
-        }
+            // -----------------------------
+            // FINAL RESULT
+            // -----------------------------
 
-        // =================================
-        // FINAL SUMMARY
-        // =================================
+            const result = {
 
-        const summary = {};
-
-        for (
-            const rr
-            of rrValues
-        ) {
-
-            const bucket =
-                results[
-                    String(rr)
-                ];
-
-            const completed =
-                bucket.buy.wins +
-                bucket.buy.losses +
-                bucket.sell.wins +
-                bucket.sell.losses;
-
-            const wins =
-                bucket.buy.wins +
-                bucket.sell.wins;
-
-            const losses =
-                bucket.buy.losses +
-                bucket.sell.losses;
-
-            const netR =
-                bucket.buy.netR +
-                bucket.sell.netR;
-
-            const winRate =
-                completed > 0
-                    ? (
-                        wins /
-                        completed
-                    ) * 100
-                    : 0;
-
-            // =================================
-            // BUY WIN RATE
-            // =================================
-
-            const buyCompleted =
-                bucket.buy.wins +
-                bucket.buy.losses;
-
-            const buyWinRate =
-                buyCompleted > 0
-                    ? (
-                        bucket.buy.wins /
-                        buyCompleted
-                    ) * 100
-                    : 0;
-
-            // =================================
-            // SELL WIN RATE
-            // =================================
-
-            const sellCompleted =
-                bucket.sell.wins +
-                bucket.sell.losses;
-
-            const sellWinRate =
-                sellCompleted > 0
-                    ? (
-                        bucket.sell.wins /
-                        sellCompleted
-                    ) * 100
-                    : 0;
-
-            summary[
-                String(rr)
-            ] = {
-
-                totalSignals:
-                    bucket.total,
-
-                buyTrades:
-                    bucket.buy.trades,
-
-                sellTrades:
-                    bucket.sell.trades,
-
-                wins,
-
-                losses,
-
-                open:
-                    bucket.buy.open +
-                    bucket.sell.open,
-
-                completed,
-
-                winRate:
-                    Number(
-                        winRate.toFixed(2)
-                    ),
-
-                netR:
-                    Number(
-                        netR.toFixed(2)
-                    ),
-
-                buy: {
-
-                    trades:
-                        bucket.buy.trades,
-
-                    wins:
-                        bucket.buy.wins,
-
-                    losses:
-                        bucket.buy.losses,
-
-                    open:
-                        bucket.buy.open,
-
-                    winRate:
-                        Number(
-                            buyWinRate.toFixed(2)
-                        ),
-
-                    netR:
-                        Number(
-                            bucket.buy.netR.toFixed(2)
-                        )
-
-                },
-
-                sell: {
-
-                    trades:
-                        bucket.sell.trades,
-
-                    wins:
-                        bucket.sell.wins,
-
-                    losses:
-                        bucket.sell.losses,
-
-                    open:
-                        bucket.sell.open,
-
-                    winRate:
-                        Number(
-                            sellWinRate.toFixed(2)
-                        ),
-
-                    netR:
-                        Number(
-                            bucket.sell.netR.toFixed(2)
-                        )
-
-                }
-
-            };
-
-        }
-
-        // =================================
-        // EXECUTION TIME
-        // =================================
-
-        const executionTime =
-            (
-                Date.now() -
-                startedAt
-            ) / 1000;
-
-        // =================================
-        // LOG RESULTS
-        // =================================
-
-        console.log("");
-
-        console.log(
-            "================================="
-        );
-
-        console.log(
-            "5-YEAR BACKTEST COMPLETE"
-        );
-
-        console.log(
-            "================================="
-        );
-
-        console.log(
-            `30M candles: ${candles30m.length}`
-        );
-
-        console.log(
-            `1H candles: ${candles1h.length}`
-        );
-
-        console.log(
-            `4H candles: ${candles4h.length}`
-        );
-
-        console.log(
-            `Qualified trades: ${trades.length}`
-        );
-
-        console.log(
-            `Execution time: ${executionTime.toFixed(2)} seconds`
-        );
-
-        console.log(
-            "================================="
-        );
-
-        // =================================
-        // RESPONSE
-        // =================================
-
-        res.json({
-
-            success:
-                true,
-
-            symbol:
-                SYMBOL,
-
-            period: {
-
-                from:
-                    new Date(
-                        fiveYearsAgo *
-                        1000
-                    ).toISOString(),
-
-                to:
-                    new Date(
-                        now *
-                        1000
-                    ).toISOString()
-
-            },
-
-            strategy: {
-
-                sameStrategyForBuyAndSell:
+                success:
                     true,
 
-                timeframeTrend:
-                    "4H",
-
-                timeframeConfirmation:
-                    "1H",
-
-                timeframeEntry:
-                    "30M",
-
-                emaFast:
-                    9,
-
-                emaSlow:
-                    26,
-
-                buy:
-                    "30M EMA 9 crosses ABOVE EMA 26 + 1H and 4H bullish",
-
-                sell:
-                    "30M EMA 9 crosses BELOW EMA 26 + 1H and 4H bearish",
-
-                entry:
-                    "Next 30M candle OPEN after crossover candle closes",
-
-                buyStopLoss:
-                    "30M crossover candle LOW",
-
-                sellStopLoss:
-                    "30M crossover candle HIGH",
-
-                target:
-                    "Entry +/- Risk × R:R"
-
-            },
-
-            data: {
-
-                candles30m:
-                    candles30m.length,
-
-                candles1h:
-                    candles1h.length,
-
-                candles4h:
-                    candles4h.length
-
-            },
-
-            summary,
-
-            yearly,
-
-            qualifiedSignals:
-                trades.length,
-
-            executionSeconds:
-                Number(
-                    executionTime.toFixed(2)
-                )
-
-        });
-
-    }
-
-    catch (error) {
-
-        console.error("");
-
-        console.error(
-            "================================="
-        );
-
-        console.error(
-            "5-YEAR BACKTEST ERROR"
-        );
-
-        console.error(
-            "================================="
-        );
-
-        console.error(
-            error
-        );
-
-        console.error(
-            "================================="
-        );
-
-        res.status(500).json({
-
-            success:
-                false,
-
-            error:
-                error.message,
-
-            message:
-                "5-year backtest failed. Check Render logs."
-
-        });
-
-    }
-
-}
-
-// =====================================
-// BACKTEST ROUTES
-// =====================================
-
-// MAIN BACKTEST ROUTE
-
-app.get(
-    "/backtest-5years",
-    runFiveYearBacktest
-);
-
-// ALIAS ROUTE
-// This is the URL we were trying earlier.
-
-app.get(
-    "/backtest-data",
-    runFiveYearBacktest
-);
-// =====================================
-// LIVE STRATEGY SIGNAL
-// 4H + 1H + 30M EMA 9/26
-// =====================================
-
-app.get("/live-signal", async (req, res) => {
-
-    try {
-
-        const now = Math.floor(Date.now() / 1000);
-
-        // Get enough recent candles
-        const lookback = 30 * 24 * 60 * 60;
-
-        const startTime = now - lookback;
-
-        // Download recent candles
-        const candles30m = await downloadDeltaCandles(
-            "30m",
-            startTime,
-            now
-        );
-
-        const candles1h = await downloadDeltaCandles(
-            "1h",
-            startTime,
-            now
-        );
-
-        const candles4h = await downloadDeltaCandles(
-            "4h",
-            startTime,
-            now
-        );
-
-        if (
-            candles30m.length < 30 ||
-            candles1h.length < 30 ||
-            candles4h.length < 30
-        ) {
-
-            return res.status(500).json({
-                success: false,
-                error: "Not enough candle data"
-            });
-
-        }
-
-        // =================================
-        // EMA 9 / EMA 26
-        // =================================
-
-        const ema30m9 =
-            calculateEMA(candles30m, 9);
-
-        const ema30m26 =
-            calculateEMA(candles30m, 26);
-
-        const ema1h9 =
-            calculateEMA(candles1h, 9);
-
-        const ema1h26 =
-            calculateEMA(candles1h, 26);
-
-        const ema4h9 =
-            calculateEMA(candles4h, 9);
-
-        const ema4h26 =
-            calculateEMA(candles4h, 26);
-
-        // =================================
-        // LAST CLOSED 30M CANDLE
-        // =================================
-
-        const last30Index =
-            candles30m.length - 1;
-
-        const last30 =
-            candles30m[last30Index];
-
-        const last30CloseTime =
-            last30.time +
-            last30.intervalSeconds;
-
-        // =================================
-        // CHECK IF 30M CANDLE IS CLOSED
-        // =================================
-
-        if (last30CloseTime > now) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "WAIT"
-
-            });
-
-        }
-
-        // =================================
-        // CHECK CROSSOVER
-        // =================================
-
-        const previous9 =
-            ema30m9[last30Index - 1];
-
-        const previous26 =
-            ema30m26[last30Index - 1];
-
-        const current9 =
-            ema30m9[last30Index];
-
-        const current26 =
-            ema30m26[last30Index];
-
-        let direction = null;
-
-        // BUY crossover
-
-        if (
-            previous9 <= previous26 &&
-            current9 > current26
-        ) {
-
-            direction = "BUY";
-
-        }
-
-        // SELL crossover
-
-        if (
-            previous9 >= previous26 &&
-            current9 < current26
-        ) {
-
-            direction = "SELL";
-
-        }
-
-        // No crossover
-
-        if (!direction) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "NO TRADE"
-
-            });
-
-        }
-
-        // =================================
-        // FIND 1H / 4H CANDLES
-        // =================================
-
-        const index1h =
-            findLastClosedCandle(
-                candles1h,
-                last30CloseTime
-            );
-
-        const index4h =
-            findLastClosedCandle(
-                candles4h,
-                last30CloseTime
-            );
-
-        if (
-            index1h < 26 ||
-            index4h < 26
-        ) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "NO TRADE"
-
-            });
-
-        }
-
-        // =================================
-        // HIGHER TIMEFRAME TREND
-        // =================================
-
-        const trend1h =
-            ema1h9[index1h] >
-            ema1h26[index1h]
-                ? "BULLISH"
-                : "BEARISH";
-
-        const trend4h =
-            ema4h9[index4h] >
-            ema4h26[index4h]
-                ? "BULLISH"
-                : "BEARISH";
-
-        // =================================
-        // TREND CONFIRMATION
-        // =================================
-
-        if (
-            direction === "BUY" &&
-            (
-                trend1h !== "BULLISH" ||
-                trend4h !== "BULLISH"
-            )
-        ) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "NO TRADE"
-
-            });
-
-        }
-
-        if (
-            direction === "SELL" &&
-            (
-                trend1h !== "BEARISH" ||
-                trend4h !== "BEARISH"
-            )
-        ) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "NO TRADE"
-
-            });
-
-        }
-
-        // =================================
-        // ENTRY
-        // =================================
-
-        const entryIndex =
-            last30Index + 1;
-
-        if (
-            entryIndex >= candles30m.length
-        ) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "WAIT"
-
-            });
-
-        }
-
-        const entryCandle =
-            candles30m[entryIndex];
-
-        const entry =
-            entryCandle.open;
-
-        // =================================
-        // STOP LOSS
-        // =================================
-
-        let stopLoss;
-
-        if (direction === "BUY") {
-
-            stopLoss = last30.low;
-
-        } else {
-
-            stopLoss = last30.high;
-
-        }
-
-        // =================================
-        // RISK
-        // =================================
-
-        const risk =
-            direction === "BUY"
-                ? entry - stopLoss
-                : stopLoss - entry;
-
-        if (
-            !Number.isFinite(risk) ||
-            risk <= 0
-        ) {
-
-            return res.json({
-
-                success: true,
-
-                signal: "NO TRADE"
-
-            });
-
-        }
-
-        // =================================
-        // INTERNAL TARGET
-        // 2R
-        // =================================
-
-        const target =
-            direction === "BUY"
-                ? entry + risk * 2
-                : entry - risk * 2;
-
-        // =================================
-        // FINAL RESULT
-        // =================================
-
-        return res.json({
-
-            success: true,
-
-            signal: direction,
-
-            entry: Number(entry.toFixed(2)),
-
-            stopLoss:
-                Number(stopLoss.toFixed(2)),
-
-            target:
-                Number(target.toFixed(2))
-
-        });
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "LIVE SIGNAL ERROR:",
-            error
-        );
-
-        res.status(500).json({
-
-            success: false,
-
-            error: error.message
-
-        });
-
-    }
-
-});
-// =====================================
-// LIVE BTC/USD AUTOMATIC ANALYSIS
-// =====================================
-
-const LIVE_INTERVALS = {
-    "5m": 5 * 60,
-    "30m": 30 * 60,
-    "1h": 60 * 60,
-    "4h": 4 * 60 * 60
-};
-
-// -------------------------------------
-// DOWNLOAD RECENT CANDLES
-// -------------------------------------
-
-async function getRecentCandles(resolution, count = 100) {
-
-    const intervalSeconds =
-        LIVE_INTERVALS[resolution];
-
-    if (!intervalSeconds) {
-        throw new Error(
-            `Unsupported resolution: ${resolution}`
-        );
-    }
-
-    const now =
-        Math.floor(Date.now() / 1000);
-
-    const start =
-        now -
-        (count * intervalSeconds);
-
-    const url =
-        DELTA_API +
-        `?resolution=${encodeURIComponent(resolution)}` +
-        `&symbol=${encodeURIComponent(SYMBOL)}` +
-        `&start=${start}` +
-        `&end=${now}`;
-
-    const response =
-        await fetch(url, {
-            headers: {
-                Accept: "application/json"
-            }
-        });
-
-    if (!response.ok) {
-
-        const errorText =
-            await response.text();
-
-        throw new Error(
-            `${resolution} API error ${response.status}: ${errorText}`
-        );
-    }
-
-    const data =
-        await response.json();
-
-    if (
-        !Array.isArray(data.result)
-    ) {
-
-        throw new Error(
-            `${resolution}: candle data not available`
-        );
-    }
-
-    const candles =
-        data.result
-            .map(normalizeCandle)
-            .sort(
-                (a, b) =>
-                    a.time - b.time
-            );
-
-    for (const candle of candles) {
-
-        candle.intervalSeconds =
-            intervalSeconds;
-    }
-
-    return candles;
-}
-
-// -------------------------------------
-// GET LAST CLOSED CANDLE
-// -------------------------------------
-
-function getLastClosedCandle(candles) {
-
-    if (!candles.length) {
-        return null;
-    }
-
-    const now =
-        Math.floor(Date.now() / 1000);
-
-    for (
-        let i = candles.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        const candle =
-            candles[i];
-
-        if (
-            candle.time +
-            candle.intervalSeconds
-            <= now
-        ) {
-
-            return {
-                candle,
-                index: i
-            };
-        }
-    }
-
-    return null;
-}
-
-// -------------------------------------
-// LIVE ANALYSIS
-// -------------------------------------
-
-app.get(
-    "/live-analysis",
-    async (req, res) => {
-
-        try {
-
-            console.log("");
-            console.log(
-                "================================="
-            );
-            console.log(
-                "LIVE BTC/USD ANALYSIS"
-            );
-            console.log(
-                "================================="
-            );
-
-            // -----------------------------
-            // DOWNLOAD TIMEFRAMES
-            // -----------------------------
-
-            const candles5m =
-                await getRecentCandles(
-                    "5m",
-                    100
-                );
-
-            const candles30m =
-                await getRecentCandles(
-                    "30m",
-                    100
-                );
-
-            const candles1h =
-                await getRecentCandles(
-                    "1h",
-                    100
-                );
-
-            const candles4h =
-                await getRecentCandles(
-                    "4h",
-                    100
-                );
-
-            // -----------------------------
-            // EMA
-            // -----------------------------
-
-            const ema5m9 =
-                calculateEMA(
-                    candles5m,
-                    9
-                );
-
-            const ema5m26 =
-                calculateEMA(
-                    candles5m,
-                    26
-                );
-
-            const ema30m9 =
-                calculateEMA(
-                    candles30m,
-                    9
-                );
-
-            const ema30m26 =
-                calculateEMA(
-                    candles30m,
-                    26
-                );
-
-            const ema1h9 =
-                calculateEMA(
-                    candles1h,
-                    9
-                );
-
-            const ema1h26 =
-                calculateEMA(
-                    candles1h,
-                    26
-                );
-
-            const ema4h9 =
-                calculateEMA(
-                    candles4h,
-                    9
-                );
-
-            const ema4h26 =
-                calculateEMA(
-                    candles4h,
-                    26
-                );
-
-            // -----------------------------
-            // LAST CLOSED CANDLES
-            // -----------------------------
-
-            const closed5m =
-                getLastClosedCandle(
-                    candles5m
-                );
-
-            const closed30m =
-                getLastClosedCandle(
-                    candles30m
-                );
-
-            const closed1h =
-                getLastClosedCandle(
-                    candles1h
-                );
-
-            const closed4h =
-                getLastClosedCandle(
-                    candles4h
-                );
-
-            if (
-                !closed5m ||
-                !closed30m ||
-                !closed1h ||
-                !closed4h
-            ) {
-
-                throw new Error(
-                    "Not enough closed candles."
-                );
-            }
-
-            const i5 =
-                closed5m.index;
-
-            const i30 =
-                closed30m.index;
-
-            const i1 =
-                closed1h.index;
-
-            const i4 =
-                closed4h.index;
-
-            // -----------------------------
-            // TREND
-            // -----------------------------
-
-            const trend4h =
-                ema4h9[i4] >
-                ema4h26[i4]
-                    ? "BULLISH"
-                    : "BEARISH";
-
-            const trend1h =
-                ema1h9[i1] >
-                ema1h26[i1]
-                    ? "BULLISH"
-                    : "BEARISH";
-
-            // -----------------------------
-            // 30M CROSSOVER
-            // -----------------------------
-
-            let crossover =
-                "NONE";
-
-            if (
-                i30 >= 1 &&
-                ema30m9[i30 - 1] <=
-                ema30m26[i30 - 1] &&
-                ema30m9[i30] >
-                ema30m26[i30]
-            ) {
-
-                crossover =
-                    "BULLISH";
-
-            }
-
-            if (
-                i30 >= 1 &&
-                ema30m9[i30 - 1] >=
-                ema30m26[i30 - 1] &&
-                ema30m9[i30] <
-                ema30m26[i30]
-            ) {
-
-                crossover =
-                    "BEARISH";
-            }
-
-            // -----------------------------
-            // 5M CONFIRMATION
-            // -----------------------------
-
-            let confirmation =
-                "NOT CONFIRMED";
-
-            if (
-                i5 >= 1 &&
-                ema5m9[i5] >
-                ema5m26[i5]
-            ) {
-
-                if (
-                    trend4h === "BULLISH" &&
-                    trend1h === "BULLISH" &&
-                    ema30m9[i30] >
-                    ema30m26[i30]
-                ) {
-
-                    confirmation =
-                        "BULLISH";
-                }
-            }
-
-            if (
-                i5 >= 1 &&
-                ema5m9[i5] <
-                ema5m26[i5]
-            ) {
-
-                if (
-                    trend4h === "BEARISH" &&
-                    trend1h === "BEARISH" &&
-                    ema30m9[i30] <
-                    ema30m26[i30]
-                ) {
-
-                    confirmation =
-                        "BEARISH";
-                }
-            }
-
-            // -----------------------------
-            // FINAL SIGNAL
-            // -----------------------------
-
-            let signal =
-                "NO TRADE";
-
-            if (
-                trend4h === "BULLISH" &&
-                trend1h === "BULLISH" &&
-                ema30m9[i30] >
-                ema30m26[i30] &&
-                confirmation === "BULLISH"
-            ) {
-
-                signal =
-                    "BUY";
-            }
-
-            if (
-                trend4h === "BEARISH" &&
-                trend1h === "BEARISH" &&
-                ema30m9[i30] <
-                ema30m26[i30] &&
-                confirmation === "BEARISH"
-            ) {
-
-                signal =
-                    "SELL";
-            }
-
-            // -----------------------------
-            // PRICE
-            // -----------------------------
-
-            const price =
-                candles5m[
-                    candles5m.length - 1
-                ].close;
-
-            // -----------------------------
-            // SIMPLE STRUCTURE LEVELS
-            // -----------------------------
-
-            const recent30 =
-                candles30m.slice(-20);
-
-            const support =
-                Math.min(
-                    ...recent30.map(
-                        c => c.low
-                    )
-                );
-
-            const resistance =
-                Math.max(
-                    ...recent30.map(
-                        c => c.high
-                    )
-                );
-
-            // -----------------------------
-            // ENTRY / SL / TARGET
-            // -----------------------------
-
-            let entry = null;
-            let stopLoss = null;
-            let target = null;
-
-            if (signal === "BUY") {
-
-                entry =
-                    price;
-
-                stopLoss =
-                    support;
-
-                const risk =
-                    entry - stopLoss;
-
-                if (risk > 0) {
-
-                    target =
-                        entry +
-                        risk * 2;
-
-                } else {
-
-                    signal =
-                        "NO TRADE";
-                }
-            }
-
-            if (signal === "SELL") {
-
-                entry =
-                    price;
-
-                stopLoss =
-                    resistance;
-
-                const risk =
-                    stopLoss - entry;
-
-                if (risk > 0) {
-
-                    target =
-                        entry -
-                        risk * 2;
-
-                } else {
-
-                    signal =
-                        "NO TRADE";
-                }
-            }
-
-            // -----------------------------
-            // RESPONSE
-            // -----------------------------
-
-            const result = {
-
-                success: true,
-
-                symbol: SYMBOL,
+                symbol:
+                    SYMBOL,
 
                 signal,
 
@@ -3306,30 +1278,11 @@ app.get(
                         )
                         : null,
 
-                trend4h,
-
-                trend1h,
-
-                confirmation,
-
-                support:
-                    Number(
-                        support.toFixed(2)
-                    ),
-
-                resistance:
-                    Number(
-                        resistance.toFixed(2)
-                    ),
-
-                candleTime:
-                    new Date(
-                        closed5m.candle.time *
-                        1000
-                    ).toISOString(),
+                reason,
 
                 updatedAt:
                     new Date().toISOString()
+
             };
 
             console.log(
@@ -3340,7 +1293,9 @@ app.get(
                 )
             );
 
-            res.json(result);
+            res.json(
+                result
+            );
 
         }
 
@@ -3353,592 +1308,21 @@ app.get(
 
             res.status(500).json({
 
-                success: false,
+                success:
+                    false,
 
                 error:
                     error.message
 
             });
+
         }
+
     }
 );
+
 // =====================================
-// LIVE BTC/USD AUTOMATIC ANALYSIS
-// =====================================
-
-const LIVE_INTERVALS = {
-    "5m": 5 * 60,
-    "30m": 30 * 60,
-    "1h": 60 * 60,
-    "4h": 4 * 60 * 60
-};
-
-// -------------------------------------
-// DOWNLOAD RECENT CANDLES
-// -------------------------------------
-
-async function getRecentCandles(resolution, count = 100) {
-
-    const intervalSeconds =
-        LIVE_INTERVALS[resolution];
-
-    if (!intervalSeconds) {
-        throw new Error(
-            `Unsupported resolution: ${resolution}`
-        );
-    }
-
-    const now =
-        Math.floor(Date.now() / 1000);
-
-    const start =
-        now -
-        (count * intervalSeconds);
-
-    const url =
-        DELTA_API +
-        `?resolution=${encodeURIComponent(resolution)}` +
-        `&symbol=${encodeURIComponent(SYMBOL)}` +
-        `&start=${start}` +
-        `&end=${now}`;
-
-    const response =
-        await fetch(url, {
-            headers: {
-                Accept: "application/json"
-            }
-        });
-
-    if (!response.ok) {
-
-        const errorText =
-            await response.text();
-
-        throw new Error(
-            `${resolution} API error ${response.status}: ${errorText}`
-        );
-    }
-
-    const data =
-        await response.json();
-
-    if (
-        !Array.isArray(data.result)
-    ) {
-
-        throw new Error(
-            `${resolution}: candle data not available`
-        );
-    }
-
-    const candles =
-        data.result
-            .map(normalizeCandle)
-            .sort(
-                (a, b) =>
-                    a.time - b.time
-            );
-
-    for (const candle of candles) {
-
-        candle.intervalSeconds =
-            intervalSeconds;
-    }
-
-    return candles;
-}
-
-// -------------------------------------
-// GET LAST CLOSED CANDLE
-// -------------------------------------
-
-function getLastClosedCandle(candles) {
-
-    if (!candles.length) {
-        return null;
-    }
-
-    const now =
-        Math.floor(Date.now() / 1000);
-
-    for (
-        let i = candles.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        const candle =
-            candles[i];
-
-        if (
-            candle.time +
-            candle.intervalSeconds
-            <= now
-        ) {
-
-            return {
-                candle,
-                index: i
-            };
-        }
-    }
-
-    return null;
-}
-
-// -------------------------------------
-// LIVE ANALYSIS
-// -------------------------------------
-
-app.get(
-    "/live-analysis",
-    async (req, res) => {
-
-        try {
-
-            console.log("");
-            console.log(
-                "================================="
-            );
-            console.log(
-                "LIVE BTC/USD ANALYSIS"
-            );
-            console.log(
-                "================================="
-            );
-
-            // -----------------------------
-            // DOWNLOAD TIMEFRAMES
-            // -----------------------------
-
-            const candles5m =
-                await getRecentCandles(
-                    "5m",
-                    100
-                );
-
-            const candles30m =
-                await getRecentCandles(
-                    "30m",
-                    100
-                );
-
-            const candles1h =
-                await getRecentCandles(
-                    "1h",
-                    100
-                );
-
-            const candles4h =
-                await getRecentCandles(
-                    "4h",
-                    100
-                );
-
-            // -----------------------------
-            // EMA
-            // -----------------------------
-
-            const ema5m9 =
-                calculateEMA(
-                    candles5m,
-                    9
-                );
-
-            const ema5m26 =
-                calculateEMA(
-                    candles5m,
-                    26
-                );
-
-            const ema30m9 =
-                calculateEMA(
-                    candles30m,
-                    9
-                );
-
-            const ema30m26 =
-                calculateEMA(
-                    candles30m,
-                    26
-                );
-
-            const ema1h9 =
-                calculateEMA(
-                    candles1h,
-                    9
-                );
-
-            const ema1h26 =
-                calculateEMA(
-                    candles1h,
-                    26
-                );
-
-            const ema4h9 =
-                calculateEMA(
-                    candles4h,
-                    9
-                );
-
-            const ema4h26 =
-                calculateEMA(
-                    candles4h,
-                    26
-                );
-
-            // -----------------------------
-            // LAST CLOSED CANDLES
-            // -----------------------------
-
-            const closed5m =
-                getLastClosedCandle(
-                    candles5m
-                );
-
-            const closed30m =
-                getLastClosedCandle(
-                    candles30m
-                );
-
-            const closed1h =
-                getLastClosedCandle(
-                    candles1h
-                );
-
-            const closed4h =
-                getLastClosedCandle(
-                    candles4h
-                );
-
-            if (
-                !closed5m ||
-                !closed30m ||
-                !closed1h ||
-                !closed4h
-            ) {
-
-                throw new Error(
-                    "Not enough closed candles."
-                );
-            }
-
-            const i5 =
-                closed5m.index;
-
-            const i30 =
-                closed30m.index;
-
-            const i1 =
-                closed1h.index;
-
-            const i4 =
-                closed4h.index;
-
-            // -----------------------------
-            // TREND
-            // -----------------------------
-
-            const trend4h =
-                ema4h9[i4] >
-                ema4h26[i4]
-                    ? "BULLISH"
-                    : "BEARISH";
-
-            const trend1h =
-                ema1h9[i1] >
-                ema1h26[i1]
-                    ? "BULLISH"
-                    : "BEARISH";
-
-            // -----------------------------
-            // 30M CROSSOVER
-            // -----------------------------
-
-            let crossover =
-                "NONE";
-
-            if (
-                i30 >= 1 &&
-                ema30m9[i30 - 1] <=
-                ema30m26[i30 - 1] &&
-                ema30m9[i30] >
-                ema30m26[i30]
-            ) {
-
-                crossover =
-                    "BULLISH";
-
-            }
-
-            if (
-                i30 >= 1 &&
-                ema30m9[i30 - 1] >=
-                ema30m26[i30 - 1] &&
-                ema30m9[i30] <
-                ema30m26[i30]
-            ) {
-
-                crossover =
-                    "BEARISH";
-            }
-
-            // -----------------------------
-            // 5M CONFIRMATION
-            // -----------------------------
-
-            let confirmation =
-                "NOT CONFIRMED";
-
-            if (
-                i5 >= 1 &&
-                ema5m9[i5] >
-                ema5m26[i5]
-            ) {
-
-                if (
-                    trend4h === "BULLISH" &&
-                    trend1h === "BULLISH" &&
-                    ema30m9[i30] >
-                    ema30m26[i30]
-                ) {
-
-                    confirmation =
-                        "BULLISH";
-                }
-            }
-
-            if (
-                i5 >= 1 &&
-                ema5m9[i5] <
-                ema5m26[i5]
-            ) {
-
-                if (
-                    trend4h === "BEARISH" &&
-                    trend1h === "BEARISH" &&
-                    ema30m9[i30] <
-                    ema30m26[i30]
-                ) {
-
-                    confirmation =
-                        "BEARISH";
-                }
-            }
-
-            // -----------------------------
-            // FINAL SIGNAL
-            // -----------------------------
-
-            let signal =
-                "NO TRADE";
-
-            if (
-                trend4h === "BULLISH" &&
-                trend1h === "BULLISH" &&
-                ema30m9[i30] >
-                ema30m26[i30] &&
-                confirmation === "BULLISH"
-            ) {
-
-                signal =
-                    "BUY";
-            }
-
-            if (
-                trend4h === "BEARISH" &&
-                trend1h === "BEARISH" &&
-                ema30m9[i30] <
-                ema30m26[i30] &&
-                confirmation === "BEARISH"
-            ) {
-
-                signal =
-                    "SELL";
-            }
-
-            // -----------------------------
-            // PRICE
-            // -----------------------------
-
-            const price =
-                candles5m[
-                    candles5m.length - 1
-                ].close;
-
-            // -----------------------------
-            // SIMPLE STRUCTURE LEVELS
-            // -----------------------------
-
-            const recent30 =
-                candles30m.slice(-20);
-
-            const support =
-                Math.min(
-                    ...recent30.map(
-                        c => c.low
-                    )
-                );
-
-            const resistance =
-                Math.max(
-                    ...recent30.map(
-                        c => c.high
-                    )
-                );
-
-            // -----------------------------
-            // ENTRY / SL / TARGET
-            // -----------------------------
-
-            let entry = null;
-            let stopLoss = null;
-            let target = null;
-
-            if (signal === "BUY") {
-
-                entry =
-                    price;
-
-                stopLoss =
-                    support;
-
-                const risk =
-                    entry - stopLoss;
-
-                if (risk > 0) {
-
-                    target =
-                        entry +
-                        risk * 2;
-
-                } else {
-
-                    signal =
-                        "NO TRADE";
-                }
-            }
-
-            if (signal === "SELL") {
-
-                entry =
-                    price;
-
-                stopLoss =
-                    resistance;
-
-                const risk =
-                    stopLoss - entry;
-
-                if (risk > 0) {
-
-                    target =
-                        entry -
-                        risk * 2;
-
-                } else {
-
-                    signal =
-                        "NO TRADE";
-                }
-            }
-
-            // -----------------------------
-            // RESPONSE
-            // -----------------------------
-
-            const result = {
-
-                success: true,
-
-                symbol: SYMBOL,
-
-                signal,
-
-                price:
-                    Number(
-                        price.toFixed(2)
-                    ),
-
-                entry:
-                    entry !== null
-                        ? Number(
-                            entry.toFixed(2)
-                        )
-                        : null,
-
-                stopLoss:
-                    stopLoss !== null
-                        ? Number(
-                            stopLoss.toFixed(2)
-                        )
-                        : null,
-
-                target:
-                    target !== null
-                        ? Number(
-                            target.toFixed(2)
-                        )
-                        : null,
-
-                trend4h,
-
-                trend1h,
-
-                confirmation,
-
-                support:
-                    Number(
-                        support.toFixed(2)
-                    ),
-
-                resistance:
-                    Number(
-                        resistance.toFixed(2)
-                    ),
-
-                candleTime:
-                    new Date(
-                        closed5m.candle.time *
-                        1000
-                    ).toISOString(),
-
-                updatedAt:
-                    new Date().toISOString()
-            };
-
-            console.log(
-                JSON.stringify(
-                    result,
-                    null,
-                    2
-                )
-            );
-
-            res.json(result);
-
-        }
-
-        catch (error) {
-
-            console.error(
-                "LIVE ANALYSIS ERROR:",
-                error
-            );
-
-            res.status(500).json({
-
-                success: false,
-
-                error:
-                    error.message
-
-            });
-        }
-    }
-);
-// =====================================
-// START SERVER
+// SERVER START
 // =====================================
 
 app.listen(
@@ -3947,73 +1331,41 @@ app.listen(
     () => {
 
         console.log("");
-
         console.log(
             "================================="
         );
-
         console.log(
             "AI TRADING SERVER RUNNING"
         );
-
         console.log(
             "================================="
         );
-
         console.log(
-            "1H = TREND"
+            "BTC/USD"
         );
-
+        console.log(
+            "4H + 1H = TREND"
+        );
         console.log(
             "30M = PRIMARY SETUP"
         );
-
         console.log(
-            "5M = ENTRY CONFIRMATION"
+            "5M = CONFIRMATION"
         );
-
-        console.log(
-            "BACKTEST = 4H + 1H + 30M EMA 9/26"
-        );
-
-        console.log(
-            "BUY = EMA 9 CROSS ABOVE EMA 26"
-        );
-
-        console.log(
-            "SELL = EMA 9 CROSS BELOW EMA 26"
-        );
-
-        console.log(
-            "SAME BUY/SELL STRATEGY = TRUE"
-        );
-
-        console.log(
-            "RR TEST = 1 / 1.5 / 2 / 2.5 / 3"
-        );
-
         console.log(
             "SIGNALS = BUY / SELL / NO TRADE"
         );
-
         console.log(
             "MODEL =",
             MODEL
         );
-
         console.log(
             "PORT =",
             PORT
         );
-
         console.log(
             "================================="
         );
-
-        console.log(
-            `Server started on port ${PORT}`
-        );
-
         console.log("");
 
     }
