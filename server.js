@@ -2429,7 +2429,364 @@ app.get(
     "/backtest-data",
     runFiveYearBacktest
 );
+// =====================================
+// LIVE STRATEGY SIGNAL
+// 4H + 1H + 30M EMA 9/26
+// =====================================
 
+app.get("/live-signal", async (req, res) => {
+
+    try {
+
+        const now = Math.floor(Date.now() / 1000);
+
+        // Get enough recent candles
+        const lookback = 30 * 24 * 60 * 60;
+
+        const startTime = now - lookback;
+
+        // Download recent candles
+        const candles30m = await downloadDeltaCandles(
+            "30m",
+            startTime,
+            now
+        );
+
+        const candles1h = await downloadDeltaCandles(
+            "1h",
+            startTime,
+            now
+        );
+
+        const candles4h = await downloadDeltaCandles(
+            "4h",
+            startTime,
+            now
+        );
+
+        if (
+            candles30m.length < 30 ||
+            candles1h.length < 30 ||
+            candles4h.length < 30
+        ) {
+
+            return res.status(500).json({
+                success: false,
+                error: "Not enough candle data"
+            });
+
+        }
+
+        // =================================
+        // EMA 9 / EMA 26
+        // =================================
+
+        const ema30m9 =
+            calculateEMA(candles30m, 9);
+
+        const ema30m26 =
+            calculateEMA(candles30m, 26);
+
+        const ema1h9 =
+            calculateEMA(candles1h, 9);
+
+        const ema1h26 =
+            calculateEMA(candles1h, 26);
+
+        const ema4h9 =
+            calculateEMA(candles4h, 9);
+
+        const ema4h26 =
+            calculateEMA(candles4h, 26);
+
+        // =================================
+        // LAST CLOSED 30M CANDLE
+        // =================================
+
+        const last30Index =
+            candles30m.length - 1;
+
+        const last30 =
+            candles30m[last30Index];
+
+        const last30CloseTime =
+            last30.time +
+            last30.intervalSeconds;
+
+        // =================================
+        // CHECK IF 30M CANDLE IS CLOSED
+        // =================================
+
+        if (last30CloseTime > now) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "WAIT"
+
+            });
+
+        }
+
+        // =================================
+        // CHECK CROSSOVER
+        // =================================
+
+        const previous9 =
+            ema30m9[last30Index - 1];
+
+        const previous26 =
+            ema30m26[last30Index - 1];
+
+        const current9 =
+            ema30m9[last30Index];
+
+        const current26 =
+            ema30m26[last30Index];
+
+        let direction = null;
+
+        // BUY crossover
+
+        if (
+            previous9 <= previous26 &&
+            current9 > current26
+        ) {
+
+            direction = "BUY";
+
+        }
+
+        // SELL crossover
+
+        if (
+            previous9 >= previous26 &&
+            current9 < current26
+        ) {
+
+            direction = "SELL";
+
+        }
+
+        // No crossover
+
+        if (!direction) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "NO TRADE"
+
+            });
+
+        }
+
+        // =================================
+        // FIND 1H / 4H CANDLES
+        // =================================
+
+        const index1h =
+            findLastClosedCandle(
+                candles1h,
+                last30CloseTime
+            );
+
+        const index4h =
+            findLastClosedCandle(
+                candles4h,
+                last30CloseTime
+            );
+
+        if (
+            index1h < 26 ||
+            index4h < 26
+        ) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "NO TRADE"
+
+            });
+
+        }
+
+        // =================================
+        // HIGHER TIMEFRAME TREND
+        // =================================
+
+        const trend1h =
+            ema1h9[index1h] >
+            ema1h26[index1h]
+                ? "BULLISH"
+                : "BEARISH";
+
+        const trend4h =
+            ema4h9[index4h] >
+            ema4h26[index4h]
+                ? "BULLISH"
+                : "BEARISH";
+
+        // =================================
+        // TREND CONFIRMATION
+        // =================================
+
+        if (
+            direction === "BUY" &&
+            (
+                trend1h !== "BULLISH" ||
+                trend4h !== "BULLISH"
+            )
+        ) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "NO TRADE"
+
+            });
+
+        }
+
+        if (
+            direction === "SELL" &&
+            (
+                trend1h !== "BEARISH" ||
+                trend4h !== "BEARISH"
+            )
+        ) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "NO TRADE"
+
+            });
+
+        }
+
+        // =================================
+        // ENTRY
+        // =================================
+
+        const entryIndex =
+            last30Index + 1;
+
+        if (
+            entryIndex >= candles30m.length
+        ) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "WAIT"
+
+            });
+
+        }
+
+        const entryCandle =
+            candles30m[entryIndex];
+
+        const entry =
+            entryCandle.open;
+
+        // =================================
+        // STOP LOSS
+        // =================================
+
+        let stopLoss;
+
+        if (direction === "BUY") {
+
+            stopLoss = last30.low;
+
+        } else {
+
+            stopLoss = last30.high;
+
+        }
+
+        // =================================
+        // RISK
+        // =================================
+
+        const risk =
+            direction === "BUY"
+                ? entry - stopLoss
+                : stopLoss - entry;
+
+        if (
+            !Number.isFinite(risk) ||
+            risk <= 0
+        ) {
+
+            return res.json({
+
+                success: true,
+
+                signal: "NO TRADE"
+
+            });
+
+        }
+
+        // =================================
+        // INTERNAL TARGET
+        // 2R
+        // =================================
+
+        const target =
+            direction === "BUY"
+                ? entry + risk * 2
+                : entry - risk * 2;
+
+        // =================================
+        // FINAL RESULT
+        // =================================
+
+        return res.json({
+
+            success: true,
+
+            signal: direction,
+
+            entry: Number(entry.toFixed(2)),
+
+            stopLoss:
+                Number(stopLoss.toFixed(2)),
+
+            target:
+                Number(target.toFixed(2))
+
+        });
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "LIVE SIGNAL ERROR:",
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
 // =====================================
 // START SERVER
 // =====================================
