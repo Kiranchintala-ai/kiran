@@ -28,6 +28,11 @@ const PORT = process.env.PORT || 3000;
 
 const MODEL = "gemini-3.6-flash";
 
+const DELTA_API =
+    "https://api.india.delta.exchange/v2/history/candles";
+
+const SYMBOL = "BTCUSD";
+
 // =====================================
 // GEMINI API KEY
 // =====================================
@@ -44,9 +49,6 @@ const ai = new GoogleGenAI({
 // =====================================
 // FRONTEND
 // =====================================
-
-// If public/index.html exists,
-// serve the public folder.
 
 const publicFolder = path.join(__dirname, "public");
 
@@ -72,15 +74,11 @@ app.get("/", (req, res) => {
     );
 
     if (fs.existsSync(publicIndex)) {
-
         return res.sendFile(publicIndex);
-
     }
 
     if (fs.existsSync(rootIndex)) {
-
         return res.sendFile(rootIndex);
-
     }
 
     res.send("AI Trading Server Running");
@@ -160,13 +158,9 @@ app.post("/analyze", async (req, res) => {
     try {
 
         const {
-
             image1H,
-
             image30M,
-
             image5M
-
         } = req.body;
 
         // =================================
@@ -199,9 +193,7 @@ app.post("/analyze", async (req, res) => {
             if (
                 typeof image !== "string"
             ) {
-
                 return image;
-
             }
 
             return image.replace(
@@ -237,9 +229,7 @@ The user has provided THREE TradingView charts of the SAME BTC/USD market.
 IMPORTANT:
 
 Do NOT automatically choose BUY.
-
 Do NOT automatically choose SELL.
-
 Do NOT force a trade.
 
 The final decision MUST be exactly ONE:
@@ -394,11 +384,8 @@ Risk Reward: ratio or -
 Reason: short reason
 
 Do not return Confidence.
-
 Do not return markdown.
-
 Do not return a table.
-
 Do not add extra text.
 
 `;
@@ -491,13 +478,16 @@ Do not add extra text.
 
         const getValue = (label) => {
 
+            const escapedLabel =
+                label.replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    "\\$&"
+                );
+
             const regex =
                 new RegExp(
                     "^\\s*" +
-                    label.replace(
-                        /[.*+?^${}()|[\]\\]/g,
-                        "\\$&"
-                    ) +
+                    escapedLabel +
                     "\\s*:\\s*(.+)$",
                     "im"
                 );
@@ -581,172 +571,1608 @@ Do not add extra text.
     }
 
 });
+
 // =====================================
-// 6 MONTH HISTORICAL DATA TEST
+// BACKTEST HELPER FUNCTIONS
 // =====================================
 
-app.get("/backtest-data", async (req, res) => {
+// Convert Delta candle into a clean numeric object
 
-    try {
+function normalizeCandle(candle) {
 
-        const resolutions = ["4h", "1h", "30m"];
+    return {
 
-        const now = Math.floor(Date.now() / 1000);
+        time: Number(candle.time),
 
-        // Approximately 6 months
-        const sixMonthsAgo = now - (180 * 24 * 60 * 60);
+        open: Number(candle.open),
 
-        const intervalSeconds = {
-            "30m": 30 * 60,
-            "1h": 60 * 60,
-            "4h": 4 * 60 * 60
-        };
+        high: Number(candle.high),
 
-        const allData = {};
+        low: Number(candle.low),
 
-        for (const resolution of resolutions) {
+        close: Number(candle.close)
 
-            const candles = [];
+    };
 
-            const step =
-                2000 * intervalSeconds[resolution];
+}
 
-            let batchStart = sixMonthsAgo;
+// =====================================
+// EMA CALCULATOR
+// =====================================
 
-            while (batchStart < now) {
+function calculateEMA(candles, period) {
 
-                const batchEnd =
-                    Math.min(
-                        batchStart + step,
-                        now
-                    );
+    if (
+        !Array.isArray(candles) ||
+        candles.length < period
+    ) {
+        return [];
+    }
 
-                const url =
-                    "https://api.india.delta.exchange/v2/history/candles" +
-                    `?resolution=${resolution}` +
-                    `&symbol=BTCUSD` +
-                    `&start=${batchStart}` +
-                    `&end=${batchEnd}`;
+    const emaValues =
+        new Array(candles.length).fill(null);
 
-                const response =
-                    await fetch(url, {
-                        headers: {
-                            "Accept": "application/json"
-                        }
-                    });
+    // First EMA = SMA
 
-                if (!response.ok) {
+    let sum = 0;
 
-                    throw new Error(
-                        `${resolution} API error: ${response.status}`
-                    );
+    for (let i = 0; i < period; i++) {
 
+        sum += candles[i].close;
+
+    }
+
+    let previousEMA =
+        sum / period;
+
+    emaValues[period - 1] =
+        previousEMA;
+
+    const multiplier =
+        2 / (period + 1);
+
+    for (
+        let i = period;
+        i < candles.length;
+        i++
+    ) {
+
+        const currentClose =
+            candles[i].close;
+
+        const currentEMA =
+            (
+                currentClose -
+                previousEMA
+            ) *
+            multiplier +
+            previousEMA;
+
+        emaValues[i] =
+            currentEMA;
+
+        previousEMA =
+            currentEMA;
+
+    }
+
+    return emaValues;
+
+}
+
+// =====================================
+// BINARY SEARCH
+// FIND LAST CANDLE WHOSE CLOSE TIME
+// IS <= target timestamp
+// =====================================
+
+function findLastClosedCandle(
+    candles,
+    targetCloseTime
+) {
+
+    let left = 0;
+
+    let right =
+        candles.length - 1;
+
+    let answer = -1;
+
+    while (left <= right) {
+
+        const middle =
+            Math.floor(
+                (left + right) / 2
+            );
+
+        const candle =
+            candles[middle];
+
+        const candleCloseTime =
+            candle.time +
+            candle.intervalSeconds;
+
+        if (
+            candleCloseTime <=
+            targetCloseTime
+        ) {
+
+            answer = middle;
+
+            left =
+                middle + 1;
+
+        } else {
+
+            right =
+                middle - 1;
+
+        }
+
+    }
+
+    return answer;
+
+}
+
+// =====================================
+// FIND LAST CANDLE BY OPEN TIME
+// =====================================
+
+function findLastCandleAtOrBefore(
+    candles,
+    targetTime
+) {
+
+    let left = 0;
+
+    let right =
+        candles.length - 1;
+
+    let answer = -1;
+
+    while (left <= right) {
+
+        const middle =
+            Math.floor(
+                (left + right) / 2
+            );
+
+        if (
+            candles[middle].time <=
+            targetTime
+        ) {
+
+            answer = middle;
+
+            left =
+                middle + 1;
+
+        } else {
+
+            right =
+                middle - 1;
+
+        }
+
+    }
+
+    return answer;
+
+}
+
+// =====================================
+// WAIT
+// Helps avoid API rate limits
+// =====================================
+
+function sleep(ms) {
+
+    return new Promise(
+        resolve =>
+            setTimeout(resolve, ms)
+    );
+
+}
+
+// =====================================
+// DOWNLOAD DELTA CANDLES
+// =====================================
+
+async function downloadDeltaCandles(
+    resolution,
+    startTime,
+    endTime
+) {
+
+    const intervalSeconds = {
+
+        "30m": 30 * 60,
+
+        "1h": 60 * 60,
+
+        "4h": 4 * 60 * 60
+
+    };
+
+    const step =
+        2000 *
+        intervalSeconds[resolution];
+
+    const candles = [];
+
+    let batchStart =
+        startTime;
+
+    let requestCount = 0;
+
+    while (
+        batchStart < endTime
+    ) {
+
+        const batchEnd =
+            Math.min(
+                batchStart + step,
+                endTime
+            );
+
+        const url =
+            DELTA_API +
+            `?resolution=${encodeURIComponent(resolution)}` +
+            `&symbol=${encodeURIComponent(SYMBOL)}` +
+            `&start=${batchStart}` +
+            `&end=${batchEnd}`;
+
+        console.log(
+            `Downloading ${resolution}: ${new Date(batchStart * 1000).toISOString()} -> ${new Date(batchEnd * 1000).toISOString()}`
+        );
+
+        const response =
+            await fetch(
+                url,
+                {
+                    headers: {
+                        "Accept":
+                            "application/json"
+                    }
                 }
+            );
 
-                const data =
-                    await response.json();
+        if (!response.ok) {
 
-                if (!data.success) {
+            const errorText =
+                await response.text();
 
-                    throw new Error(
-                        `${resolution} API returned unsuccessful response`
-                    );
+            throw new Error(
+                `${resolution} API error ${response.status}: ${errorText}`
+            );
 
-                }
+        }
 
-                if (Array.isArray(data.result)) {
+        const data =
+            await response.json();
 
-                    candles.push(
-                        ...data.result
-                    );
+        if (
+            data.success === false
+        ) {
 
-                }
+            throw new Error(
+                `${resolution} API returned unsuccessful response`
+            );
 
-                batchStart =
-                    batchEnd + intervalSeconds[resolution];
+        }
 
-            }
+        if (
+            Array.isArray(data.result)
+        ) {
 
-            // Remove duplicate candles
-            const unique = new Map();
+            for (
+                const candle
+                of data.result
+            ) {
 
-            for (const candle of candles) {
-
-                unique.set(
-                    candle.time,
-                    candle
+                candles.push(
+                    normalizeCandle(
+                        candle
+                    )
                 );
 
             }
 
-            // Keep only CLOSED candles
-            const closedCandles =
-                Array.from(unique.values())
-                    .filter(candle =>
-                        Number(candle.time) +
-                        intervalSeconds[resolution] <= now
-                    )
-                    .sort(
-                        (a, b) =>
-                            Number(a.time) -
-                            Number(b.time)
-                    );
+        }
 
-            allData[resolution] = {
+        requestCount++;
 
-                candles: closedCandles,
+        batchStart =
+            batchEnd +
+            intervalSeconds[resolution];
 
-                count: closedCandles.length,
+        // Small pause between requests
 
-                firstTime:
-                    closedCandles.length
-                        ? closedCandles[0].time
-                        : null,
+        if (
+            batchStart < endTime
+        ) {
 
-                lastTime:
-                    closedCandles.length
-                        ? closedCandles[
-                            closedCandles.length - 1
-                        ].time
-                        : null
-
-            };
+            await sleep(120);
 
         }
 
-        res.json({
-
-            success: true,
-
-            message:
-                "6-month BTCUSD historical data loaded successfully.",
-
-            symbol: "BTCUSD",
-
-            data: allData
-
-        });
-
     }
 
-    catch (error) {
+    // Remove duplicates
 
-        console.error(
-            "Backtest Data Error:",
-            error
+    const unique =
+        new Map();
+
+    for (
+        const candle
+        of candles
+    ) {
+
+        unique.set(
+            candle.time,
+            candle
         );
 
-        res.status(500).json({
+    }
 
-            success: false,
+    // Sort
 
-            error: error.message
+    const cleaned =
+        Array.from(
+            unique.values()
+        )
+        .sort(
+            (a, b) =>
+                a.time - b.time
+        );
 
-        });
+    // Add interval information
+
+    for (
+        const candle
+        of cleaned
+    ) {
+
+        candle.intervalSeconds =
+            intervalSeconds[
+                resolution
+            ];
 
     }
 
-});
+    console.log(
+        `${resolution}: ${cleaned.length} candles downloaded using ${requestCount} requests`
+    );
+
+    return cleaned;
+
+}
+
+// =====================================
+// BACKTEST RESULT CALCULATOR
+// =====================================
+
+function calculateTradeResult(
+    direction,
+    entry,
+    stopLoss,
+    candlesAfterEntry,
+    rr
+) {
+
+    const risk =
+        direction === "BUY"
+            ? entry - stopLoss
+            : stopLoss - entry;
+
+    if (
+        !Number.isFinite(risk) ||
+        risk <= 0
+    ) {
+
+        return {
+            result: "INVALID",
+            r: 0
+        };
+
+    }
+
+    const target =
+        direction === "BUY"
+            ? entry + risk * rr
+            : entry - risk * rr;
+
+    let result =
+        "OPEN";
+
+    let exitPrice =
+        null;
+
+    let exitTime =
+        null;
+
+    for (
+        const candle
+        of candlesAfterEntry
+    ) {
+
+        if (
+            direction === "BUY"
+        ) {
+
+            const hitSL =
+                candle.low <=
+                stopLoss;
+
+            const hitTP =
+                candle.high >=
+                target;
+
+            // Conservative rule:
+            // If both SL and TP occur
+            // inside the same candle,
+            // count SL first.
+
+            if (
+                hitSL &&
+                hitTP
+            ) {
+
+                result =
+                    "LOSS";
+
+                exitPrice =
+                    stopLoss;
+
+                exitTime =
+                    candle.time;
+
+                break;
+
+            }
+
+            if (hitSL) {
+
+                result =
+                    "LOSS";
+
+                exitPrice =
+                    stopLoss;
+
+                exitTime =
+                    candle.time;
+
+                break;
+
+            }
+
+            if (hitTP) {
+
+                result =
+                    "WIN";
+
+                exitPrice =
+                    target;
+
+                exitTime =
+                    candle.time;
+
+                break;
+
+            }
+
+        } else {
+
+            const hitSL =
+                candle.high >=
+                stopLoss;
+
+            const hitTP =
+                candle.low <=
+                target;
+
+            if (
+                hitSL &&
+                hitTP
+            ) {
+
+                result =
+                    "LOSS";
+
+                exitPrice =
+                    stopLoss;
+
+                exitTime =
+                    candle.time;
+
+                break;
+
+            }
+
+            if (hitSL) {
+
+                result =
+                    "LOSS";
+
+                exitPrice =
+                    stopLoss;
+
+                exitTime =
+                    candle.time;
+
+                break;
+
+            }
+
+            if (hitTP) {
+
+                result =
+                    "WIN";
+
+                exitPrice =
+                    target;
+
+                exitTime =
+                    candle.time;
+
+                break;
+
+            }
+
+        }
+
+    }
+
+    if (
+        result === "WIN"
+    ) {
+
+        return {
+
+            result,
+
+            r: rr,
+
+            exitPrice,
+
+            exitTime
+
+        };
+
+    }
+
+    if (
+        result === "LOSS"
+    ) {
+
+        return {
+
+            result,
+
+            r: -1,
+
+            exitPrice,
+
+            exitTime
+
+        };
+
+    }
+
+    // If neither target nor SL
+    // was reached in available data
+
+    return {
+
+        result: "OPEN",
+
+        r: 0,
+
+        exitPrice: null,
+
+        exitTime: null
+
+    };
+
+}
+
+// =====================================
+// 5-YEAR EMA 9/26 BACKTEST
+// =====================================
+
+app.get(
+    "/backtest-5years",
+    async (req, res) => {
+
+        const startedAt =
+            Date.now();
+
+        try {
+
+            console.log("");
+            console.log(
+                "================================="
+            );
+            console.log(
+                "STARTING 5-YEAR BTCUSD BACKTEST"
+            );
+            console.log(
+                "================================="
+            );
+
+            const now =
+                Math.floor(
+                    Date.now() / 1000
+                );
+
+            const fiveYearsAgo =
+                now -
+                (
+                    5 *
+                    365 *
+                    24 *
+                    60 *
+                    60
+                );
+
+            // =================================
+            // DOWNLOAD DATA
+            // =================================
+
+            const candles30m =
+                await downloadDeltaCandles(
+                    "30m",
+                    fiveYearsAgo,
+                    now
+                );
+
+            const candles1h =
+                await downloadDeltaCandles(
+                    "1h",
+                    fiveYearsAgo,
+                    now
+                );
+
+            const candles4h =
+                await downloadDeltaCandles(
+                    "4h",
+                    fiveYearsAgo,
+                    now
+                );
+
+            if (
+                candles30m.length < 100 ||
+                candles1h.length < 100 ||
+                candles4h.length < 100
+            ) {
+
+                throw new Error(
+                    "Not enough historical candles were downloaded."
+                );
+
+            }
+
+            // =================================
+            // EMA 9 / EMA 26
+            // =================================
+
+            const ema30m9 =
+                calculateEMA(
+                    candles30m,
+                    9
+                );
+
+            const ema30m26 =
+                calculateEMA(
+                    candles30m,
+                    26
+                );
+
+            const ema1h9 =
+                calculateEMA(
+                    candles1h,
+                    9
+                );
+
+            const ema1h26 =
+                calculateEMA(
+                    candles1h,
+                    26
+                );
+
+            const ema4h9 =
+                calculateEMA(
+                    candles4h,
+                    9
+                );
+
+            const ema4h26 =
+                calculateEMA(
+                    candles4h,
+                    26
+                );
+
+            // =================================
+            // R:R VALUES
+            // =================================
+
+            const rrValues = [
+                1,
+                1.5,
+                2,
+                2.5,
+                3
+            ];
+
+            // =================================
+            // RESULTS STORAGE
+            // =================================
+
+            const results = {};
+
+            for (
+                const rr
+                of rrValues
+            ) {
+
+                results[
+                    String(rr)
+                ] = {
+
+                    total: 0,
+
+                    buy: {
+                        trades: 0,
+                        wins: 0,
+                        losses: 0,
+                        open: 0,
+                        netR: 0
+                    },
+
+                    sell: {
+                        trades: 0,
+                        wins: 0,
+                        losses: 0,
+                        open: 0,
+                        netR: 0
+                    }
+
+                };
+
+            }
+
+            // =================================
+            // YEARLY RESULTS
+            // =================================
+
+            const yearly = {};
+
+            // =================================
+            // TRADE LIST
+            // =================================
+
+            const trades = [];
+
+            // =================================
+            // FIND 30M CROSSOVERS
+            // =================================
+
+            for (
+                let i = 26;
+                i <
+                candles30m.length - 1;
+                i++
+            ) {
+
+                const previousEMA9 =
+                    ema30m9[i - 1];
+
+                const previousEMA26 =
+                    ema30m26[i - 1];
+
+                const currentEMA9 =
+                    ema30m9[i];
+
+                const currentEMA26 =
+                    ema30m26[i];
+
+                if (
+                    previousEMA9 === null ||
+                    previousEMA26 === null ||
+                    currentEMA9 === null ||
+                    currentEMA26 === null
+                ) {
+
+                    continue;
+
+                }
+
+                // =================================
+                // CROSSOVER
+                // =================================
+
+                let direction =
+                    null;
+
+                // Bullish crossover
+
+                if (
+                    previousEMA9 <=
+                    previousEMA26 &&
+                    currentEMA9 >
+                    currentEMA26
+                ) {
+
+                    direction =
+                        "BUY";
+
+                }
+
+                // Bearish crossover
+
+                if (
+                    previousEMA9 >=
+                    previousEMA26 &&
+                    currentEMA9 <
+                    currentEMA26
+                ) {
+
+                    direction =
+                        "SELL";
+
+                }
+
+                if (!direction) {
+
+                    continue;
+
+                }
+
+                // =================================
+                // 30M CANDLE CLOSE
+                // =================================
+
+                const signalCandle =
+                    candles30m[i];
+
+                const signalCloseTime =
+                    signalCandle.time +
+                    signalCandle.intervalSeconds;
+
+                // =================================
+                // 4H TREND
+                // =================================
+
+                const index4h =
+                    findLastClosedCandle(
+                        candles4h,
+                        signalCloseTime
+                    );
+
+                // =================================
+                // 1H TREND
+                // =================================
+
+                const index1h =
+                    findLastClosedCandle(
+                        candles1h,
+                        signalCloseTime
+                    );
+
+                if (
+                    index4h < 26 ||
+                    index1h < 26
+                ) {
+
+                    continue;
+
+                }
+
+                const trend4h =
+                    ema4h9[index4h] >
+                    ema4h26[index4h]
+                        ? "BULLISH"
+                        : "BEARISH";
+
+                const trend1h =
+                    ema1h9[index1h] >
+                    ema1h26[index1h]
+                        ? "BULLISH"
+                        : "BEARISH";
+
+                // =================================
+                // HIGHER TIMEFRAME CONFIRMATION
+                // =================================
+
+                if (
+                    direction === "BUY" &&
+                    (
+                        trend4h !== "BULLISH" ||
+                        trend1h !== "BULLISH"
+                    )
+                ) {
+
+                    continue;
+
+                }
+
+                if (
+                    direction === "SELL" &&
+                    (
+                        trend4h !== "BEARISH" ||
+                        trend1h !== "BEARISH"
+                    )
+                ) {
+
+                    continue;
+
+                }
+
+                // =================================
+                // ENTRY
+                // =================================
+
+                const entryIndex =
+                    i + 1;
+
+                if (
+                    entryIndex >=
+                    candles30m.length
+                ) {
+
+                    continue;
+
+                }
+
+                const entryCandle =
+                    candles30m[
+                        entryIndex
+                    ];
+
+                const entry =
+                    entryCandle.open;
+
+                // =================================
+                // STOP LOSS
+                // =================================
+
+                // Structure-based SL:
+                // use crossover candle extreme.
+
+                let stopLoss;
+
+                if (
+                    direction === "BUY"
+                ) {
+
+                    stopLoss =
+                        signalCandle.low;
+
+                } else {
+
+                    stopLoss =
+                        signalCandle.high;
+
+                }
+
+                const risk =
+                    direction === "BUY"
+                        ? entry - stopLoss
+                        : stopLoss - entry;
+
+                if (
+                    !Number.isFinite(risk) ||
+                    risk <= 0
+                ) {
+
+                    continue;
+
+                }
+
+                // =================================
+                // FUTURE CANDLES
+                // =================================
+
+                const futureCandles =
+                    candles30m.slice(
+                        entryIndex
+                    );
+
+                // =================================
+                // TEST ALL R:R VALUES
+                // =================================
+
+                const tradeRecord = {
+
+                    time:
+                        signalCandle.time,
+
+                    date:
+                        new Date(
+                            signalCandle.time *
+                            1000
+                        ).toISOString(),
+
+                    direction,
+
+                    entry,
+
+                    stopLoss,
+
+                    risk,
+
+                    trend4h,
+
+                    trend1h,
+
+                    rr: {}
+
+                };
+
+                for (
+                    const rr
+                    of rrValues
+                ) {
+
+                    const result =
+                        calculateTradeResult(
+                            direction,
+                            entry,
+                            stopLoss,
+                            futureCandles,
+                            rr
+                        );
+
+                    const bucket =
+                        results[
+                            String(rr)
+                        ];
+
+                    bucket.total++;
+
+                    if (
+                        direction === "BUY"
+                    ) {
+
+                        bucket.buy.trades++;
+
+                    } else {
+
+                        bucket.sell.trades++;
+
+                    }
+
+                    if (
+                        result.result ===
+                        "WIN"
+                    ) {
+
+                        if (
+                            direction === "BUY"
+                        ) {
+
+                            bucket.buy.wins++;
+
+                            bucket.buy.netR +=
+                                result.r;
+
+                        } else {
+
+                            bucket.sell.wins++;
+
+                            bucket.sell.netR +=
+                                result.r;
+
+                        }
+
+                    }
+
+                    else if (
+                        result.result ===
+                        "LOSS"
+                    ) {
+
+                        if (
+                            direction === "BUY"
+                        ) {
+
+                            bucket.buy.losses++;
+
+                            bucket.buy.netR +=
+                                result.r;
+
+                        } else {
+
+                            bucket.sell.losses++;
+
+                            bucket.sell.netR +=
+                                result.r;
+
+                        }
+
+                    }
+
+                    else {
+
+                        if (
+                            direction === "BUY"
+                        ) {
+
+                            bucket.buy.open++;
+
+                        } else {
+
+                            bucket.sell.open++;
+
+                        }
+
+                    }
+
+                    tradeRecord.rr[
+                        String(rr)
+                    ] = {
+
+                        result:
+                            result.result,
+
+                        r:
+                            result.r,
+
+                        exitPrice:
+                            result.exitPrice,
+
+                        exitTime:
+                            result.exitTime
+
+                    };
+
+                }
+
+                trades.push(
+                    tradeRecord
+                );
+
+            }
+
+            // =================================
+            // YEARLY AGGREGATION
+            // =================================
+
+            for (
+                const trade
+                of trades
+            ) {
+
+                const year =
+                    new Date(
+                        trade.time *
+                        1000
+                    ).getUTCFullYear();
+
+                if (
+                    !yearly[year]
+                ) {
+
+                    yearly[year] = {};
+
+                    for (
+                        const rr
+                        of rrValues
+                    ) {
+
+                        yearly[year][
+                            String(rr)
+                        ] = {
+
+                            total: 0,
+
+                            buy: {
+                                wins: 0,
+                                losses: 0,
+                                open: 0,
+                                netR: 0
+                            },
+
+                            sell: {
+                                wins: 0,
+                                losses: 0,
+                                open: 0,
+                                netR: 0
+                            }
+
+                        };
+
+                    }
+
+                }
+
+                for (
+                    const rr
+                    of rrValues
+                ) {
+
+                    const result =
+                        trade.rr[
+                            String(rr)
+                        ];
+
+                    const bucket =
+                        yearly[year][
+                            String(rr)
+                        ];
+
+                    if (
+                        result.result ===
+                        "OPEN"
+                    ) {
+
+                        bucket[
+                            trade.direction
+                                .toLowerCase()
+                        ].open++;
+
+                    }
+
+                    if (
+                        result.result ===
+                        "WIN"
+                    ) {
+
+                        bucket[
+                            trade.direction
+                                .toLowerCase()
+                        ].wins++;
+
+                        bucket[
+                            trade.direction
+                                .toLowerCase()
+                        ].netR +=
+                            result.r;
+
+                    }
+
+                    if (
+                        result.result ===
+                        "LOSS"
+                    ) {
+
+                        bucket[
+                            trade.direction
+                                .toLowerCase()
+                        ].losses++;
+
+                        bucket[
+                            trade.direction
+                                .toLowerCase()
+                        ].netR +=
+                            result.r;
+
+                    }
+
+                    bucket.total++;
+
+                }
+
+            }
+
+            // =================================
+            // FINAL SUMMARY
+            // =================================
+
+            const summary = {};
+
+            for (
+                const rr
+                of rrValues
+            ) {
+
+                const bucket =
+                    results[
+                        String(rr)
+                    ];
+
+                const completed =
+                    bucket.buy.wins +
+                    bucket.buy.losses +
+                    bucket.sell.wins +
+                    bucket.sell.losses;
+
+                const wins =
+                    bucket.buy.wins +
+                    bucket.sell.wins;
+
+                const losses =
+                    bucket.buy.losses +
+                    bucket.sell.losses;
+
+                const netR =
+                    bucket.buy.netR +
+                    bucket.sell.netR;
+
+                const winRate =
+                    completed > 0
+                        ? (
+                            wins /
+                            completed
+                        ) * 100
+                        : 0;
+
+                summary[
+                    String(rr)
+                ] = {
+
+                    totalSignals:
+                        bucket.total,
+
+                    buyTrades:
+                        bucket.buy.trades,
+
+                    sellTrades:
+                        bucket.sell.trades,
+
+                    wins,
+
+                    losses,
+
+                    open:
+                        bucket.buy.open +
+                        bucket.sell.open,
+
+                    completed,
+
+                    winRate:
+                        Number(
+                            winRate.toFixed(2)
+                        ),
+
+                    netR:
+                        Number(
+                            netR.toFixed(2)
+                        ),
+
+                    buy: {
+
+                        trades:
+                            bucket.buy.trades,
+
+                        wins:
+                            bucket.buy.wins,
+
+                        losses:
+                            bucket.buy.losses,
+
+                        open:
+                            bucket.buy.open,
+
+                        winRate:
+                            bucket.buy.wins +
+                            bucket.buy.losses >
+                            0
+                                ? Number(
+                                    (
+                                        bucket.buy.wins /
+                                        (
+                                            bucket.buy.wins +
+                                            bucket.buy.losses
+                                        )
+                                    * 100
+                                    ).toFixed(2)
+                                )
+                                : 0,
+
+                        netR:
+                            Number(
+                                bucket.buy.netR.toFixed(2)
+                            )
+
+                    },
+
+                    sell: {
+
+                        trades:
+                            bucket.sell.trades,
+
+                        wins:
+                            bucket.sell.wins,
+
+                        losses:
+                            bucket.sell.losses,
+
+                        open:
+                            bucket.sell.open,
+
+                        winRate:
+                            bucket.sell.wins +
+                            bucket.sell.losses >
+                            0
+                                ? Number(
+                                    (
+                                        bucket.sell.wins /
+                                        (
+                                            bucket.sell.wins +
+                                            bucket.sell.losses
+                                        )
+                                    * 100
+                                    ).toFixed(2)
+                                )
+                                : 0,
+
+                        netR:
+                            Number(
+                                bucket.sell.netR.toFixed(2)
+                            )
+
+                    }
+
+                };
+
+            }
+
+            // =================================
+            // RESPONSE
+            // =================================
+
+            const executionTime =
+                (
+                    Date.now() -
+                    startedAt
+                ) / 1000;
+
+            console.log("");
+            console.log(
+                "================================="
+            );
+            console.log(
+                "5-YEAR BACKTEST COMPLETE"
+            );
+            console.log(
+                "================================="
+            );
+            console.log(
+                `30M candles: ${candles30m.length}`
+            );
+            console.log(
+                `1H candles: ${candles1h.length}`
+            );
+            console.log(
+                `4H candles: ${candles4h.length}`
+            );
+            console.log(
+                `Qualified trades: ${trades.length}`
+            );
+            console.log(
+                `Execution time: ${executionTime}s`
+            );
+            console.log(
+                "================================="
+            );
+
+            res.json({
+
+                success: true,
+
+                symbol: SYMBOL,
+
+                period: {
+
+                    from:
+                        new Date(
+                            fiveYearsAgo *
+                            1000
+                        ).toISOString(),
+
+                    to:
+                        new Date(
+                            now *
+                            1000
+                        ).toISOString()
+
+                },
+
+                strategy: {
+
+                    timeframeTrend:
+                        "4H",
+
+                    timeframeConfirmation:
+                        "1H",
+
+                    timeframeEntry:
+                        "30M",
+
+                    emaFast: 9,
+
+                    emaSlow: 26,
+
+                    entry:
+                        "Next 30M candle open after crossover candle closes",
+
+                    higherTimeframeConfirmation:
+                        "4H and 1H must agree with 30M crossover",
+
+                    buy:
+                        "30M EMA 9 crosses above EMA 26",
+
+                    sell:
+                        "30M EMA 9 crosses below EMA 26",
+
+                    stopLoss:
+                        "30M crossover candle low/high",
+
+                    target:
+                        "Entry +/- risk * R:R",
+
+                    sameStrategyForBuyAndSell:
+                        true
+
+                },
+
+                data: {
+
+                    candles30m:
+                        candles30m.length,
+
+                    candles1h:
+                        candles1h.length,
+
+                    candles4h:
+                        candles4h.length
+
+                },
+
+                summary,
+
+                yearly,
+
+                qualifiedSignals:
+                    trades.length,
+
+                executionSeconds:
+                    Number(
+                        executionTime.toFixed(2)
+                    )
+
+            });
+
+        }
+
+        catch (error) {
+
+            console.error("");
+            console.error(
+                "================================="
+            );
+            console.error(
+                "5-YEAR BACKTEST ERROR"
+            );
+            console.error(
+                "================================="
+            );
+            console.error(
+                error
+            );
+            console.error(
+                "================================="
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message,
+
+                message:
+                    "5-year backtest failed. Check Render logs for details."
+
+            });
+
+        }
+
+    }
+);
+
 // =====================================
 // START SERVER
 // =====================================
@@ -779,6 +2205,10 @@ app.listen(
 
         console.log(
             "5M = ENTRY CONFIRMATION"
+        );
+
+        console.log(
+            "BACKTEST = 4H + 1H + 30M EMA 9/26"
         );
 
         console.log(
