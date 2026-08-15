@@ -2788,6 +2788,1156 @@ app.get("/live-signal", async (req, res) => {
 
 });
 // =====================================
+// LIVE BTC/USD AUTOMATIC ANALYSIS
+// =====================================
+
+const LIVE_INTERVALS = {
+    "5m": 5 * 60,
+    "30m": 30 * 60,
+    "1h": 60 * 60,
+    "4h": 4 * 60 * 60
+};
+
+// -------------------------------------
+// DOWNLOAD RECENT CANDLES
+// -------------------------------------
+
+async function getRecentCandles(resolution, count = 100) {
+
+    const intervalSeconds =
+        LIVE_INTERVALS[resolution];
+
+    if (!intervalSeconds) {
+        throw new Error(
+            `Unsupported resolution: ${resolution}`
+        );
+    }
+
+    const now =
+        Math.floor(Date.now() / 1000);
+
+    const start =
+        now -
+        (count * intervalSeconds);
+
+    const url =
+        DELTA_API +
+        `?resolution=${encodeURIComponent(resolution)}` +
+        `&symbol=${encodeURIComponent(SYMBOL)}` +
+        `&start=${start}` +
+        `&end=${now}`;
+
+    const response =
+        await fetch(url, {
+            headers: {
+                Accept: "application/json"
+            }
+        });
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text();
+
+        throw new Error(
+            `${resolution} API error ${response.status}: ${errorText}`
+        );
+    }
+
+    const data =
+        await response.json();
+
+    if (
+        !Array.isArray(data.result)
+    ) {
+
+        throw new Error(
+            `${resolution}: candle data not available`
+        );
+    }
+
+    const candles =
+        data.result
+            .map(normalizeCandle)
+            .sort(
+                (a, b) =>
+                    a.time - b.time
+            );
+
+    for (const candle of candles) {
+
+        candle.intervalSeconds =
+            intervalSeconds;
+    }
+
+    return candles;
+}
+
+// -------------------------------------
+// GET LAST CLOSED CANDLE
+// -------------------------------------
+
+function getLastClosedCandle(candles) {
+
+    if (!candles.length) {
+        return null;
+    }
+
+    const now =
+        Math.floor(Date.now() / 1000);
+
+    for (
+        let i = candles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const candle =
+            candles[i];
+
+        if (
+            candle.time +
+            candle.intervalSeconds
+            <= now
+        ) {
+
+            return {
+                candle,
+                index: i
+            };
+        }
+    }
+
+    return null;
+}
+
+// -------------------------------------
+// LIVE ANALYSIS
+// -------------------------------------
+
+app.get(
+    "/live-analysis",
+    async (req, res) => {
+
+        try {
+
+            console.log("");
+            console.log(
+                "================================="
+            );
+            console.log(
+                "LIVE BTC/USD ANALYSIS"
+            );
+            console.log(
+                "================================="
+            );
+
+            // -----------------------------
+            // DOWNLOAD TIMEFRAMES
+            // -----------------------------
+
+            const candles5m =
+                await getRecentCandles(
+                    "5m",
+                    100
+                );
+
+            const candles30m =
+                await getRecentCandles(
+                    "30m",
+                    100
+                );
+
+            const candles1h =
+                await getRecentCandles(
+                    "1h",
+                    100
+                );
+
+            const candles4h =
+                await getRecentCandles(
+                    "4h",
+                    100
+                );
+
+            // -----------------------------
+            // EMA
+            // -----------------------------
+
+            const ema5m9 =
+                calculateEMA(
+                    candles5m,
+                    9
+                );
+
+            const ema5m26 =
+                calculateEMA(
+                    candles5m,
+                    26
+                );
+
+            const ema30m9 =
+                calculateEMA(
+                    candles30m,
+                    9
+                );
+
+            const ema30m26 =
+                calculateEMA(
+                    candles30m,
+                    26
+                );
+
+            const ema1h9 =
+                calculateEMA(
+                    candles1h,
+                    9
+                );
+
+            const ema1h26 =
+                calculateEMA(
+                    candles1h,
+                    26
+                );
+
+            const ema4h9 =
+                calculateEMA(
+                    candles4h,
+                    9
+                );
+
+            const ema4h26 =
+                calculateEMA(
+                    candles4h,
+                    26
+                );
+
+            // -----------------------------
+            // LAST CLOSED CANDLES
+            // -----------------------------
+
+            const closed5m =
+                getLastClosedCandle(
+                    candles5m
+                );
+
+            const closed30m =
+                getLastClosedCandle(
+                    candles30m
+                );
+
+            const closed1h =
+                getLastClosedCandle(
+                    candles1h
+                );
+
+            const closed4h =
+                getLastClosedCandle(
+                    candles4h
+                );
+
+            if (
+                !closed5m ||
+                !closed30m ||
+                !closed1h ||
+                !closed4h
+            ) {
+
+                throw new Error(
+                    "Not enough closed candles."
+                );
+            }
+
+            const i5 =
+                closed5m.index;
+
+            const i30 =
+                closed30m.index;
+
+            const i1 =
+                closed1h.index;
+
+            const i4 =
+                closed4h.index;
+
+            // -----------------------------
+            // TREND
+            // -----------------------------
+
+            const trend4h =
+                ema4h9[i4] >
+                ema4h26[i4]
+                    ? "BULLISH"
+                    : "BEARISH";
+
+            const trend1h =
+                ema1h9[i1] >
+                ema1h26[i1]
+                    ? "BULLISH"
+                    : "BEARISH";
+
+            // -----------------------------
+            // 30M CROSSOVER
+            // -----------------------------
+
+            let crossover =
+                "NONE";
+
+            if (
+                i30 >= 1 &&
+                ema30m9[i30 - 1] <=
+                ema30m26[i30 - 1] &&
+                ema30m9[i30] >
+                ema30m26[i30]
+            ) {
+
+                crossover =
+                    "BULLISH";
+
+            }
+
+            if (
+                i30 >= 1 &&
+                ema30m9[i30 - 1] >=
+                ema30m26[i30 - 1] &&
+                ema30m9[i30] <
+                ema30m26[i30]
+            ) {
+
+                crossover =
+                    "BEARISH";
+            }
+
+            // -----------------------------
+            // 5M CONFIRMATION
+            // -----------------------------
+
+            let confirmation =
+                "NOT CONFIRMED";
+
+            if (
+                i5 >= 1 &&
+                ema5m9[i5] >
+                ema5m26[i5]
+            ) {
+
+                if (
+                    trend4h === "BULLISH" &&
+                    trend1h === "BULLISH" &&
+                    ema30m9[i30] >
+                    ema30m26[i30]
+                ) {
+
+                    confirmation =
+                        "BULLISH";
+                }
+            }
+
+            if (
+                i5 >= 1 &&
+                ema5m9[i5] <
+                ema5m26[i5]
+            ) {
+
+                if (
+                    trend4h === "BEARISH" &&
+                    trend1h === "BEARISH" &&
+                    ema30m9[i30] <
+                    ema30m26[i30]
+                ) {
+
+                    confirmation =
+                        "BEARISH";
+                }
+            }
+
+            // -----------------------------
+            // FINAL SIGNAL
+            // -----------------------------
+
+            let signal =
+                "NO TRADE";
+
+            if (
+                trend4h === "BULLISH" &&
+                trend1h === "BULLISH" &&
+                ema30m9[i30] >
+                ema30m26[i30] &&
+                confirmation === "BULLISH"
+            ) {
+
+                signal =
+                    "BUY";
+            }
+
+            if (
+                trend4h === "BEARISH" &&
+                trend1h === "BEARISH" &&
+                ema30m9[i30] <
+                ema30m26[i30] &&
+                confirmation === "BEARISH"
+            ) {
+
+                signal =
+                    "SELL";
+            }
+
+            // -----------------------------
+            // PRICE
+            // -----------------------------
+
+            const price =
+                candles5m[
+                    candles5m.length - 1
+                ].close;
+
+            // -----------------------------
+            // SIMPLE STRUCTURE LEVELS
+            // -----------------------------
+
+            const recent30 =
+                candles30m.slice(-20);
+
+            const support =
+                Math.min(
+                    ...recent30.map(
+                        c => c.low
+                    )
+                );
+
+            const resistance =
+                Math.max(
+                    ...recent30.map(
+                        c => c.high
+                    )
+                );
+
+            // -----------------------------
+            // ENTRY / SL / TARGET
+            // -----------------------------
+
+            let entry = null;
+            let stopLoss = null;
+            let target = null;
+
+            if (signal === "BUY") {
+
+                entry =
+                    price;
+
+                stopLoss =
+                    support;
+
+                const risk =
+                    entry - stopLoss;
+
+                if (risk > 0) {
+
+                    target =
+                        entry +
+                        risk * 2;
+
+                } else {
+
+                    signal =
+                        "NO TRADE";
+                }
+            }
+
+            if (signal === "SELL") {
+
+                entry =
+                    price;
+
+                stopLoss =
+                    resistance;
+
+                const risk =
+                    stopLoss - entry;
+
+                if (risk > 0) {
+
+                    target =
+                        entry -
+                        risk * 2;
+
+                } else {
+
+                    signal =
+                        "NO TRADE";
+                }
+            }
+
+            // -----------------------------
+            // RESPONSE
+            // -----------------------------
+
+            const result = {
+
+                success: true,
+
+                symbol: SYMBOL,
+
+                signal,
+
+                price:
+                    Number(
+                        price.toFixed(2)
+                    ),
+
+                entry:
+                    entry !== null
+                        ? Number(
+                            entry.toFixed(2)
+                        )
+                        : null,
+
+                stopLoss:
+                    stopLoss !== null
+                        ? Number(
+                            stopLoss.toFixed(2)
+                        )
+                        : null,
+
+                target:
+                    target !== null
+                        ? Number(
+                            target.toFixed(2)
+                        )
+                        : null,
+
+                trend4h,
+
+                trend1h,
+
+                confirmation,
+
+                support:
+                    Number(
+                        support.toFixed(2)
+                    ),
+
+                resistance:
+                    Number(
+                        resistance.toFixed(2)
+                    ),
+
+                candleTime:
+                    new Date(
+                        closed5m.candle.time *
+                        1000
+                    ).toISOString(),
+
+                updatedAt:
+                    new Date().toISOString()
+            };
+
+            console.log(
+                JSON.stringify(
+                    result,
+                    null,
+                    2
+                )
+            );
+
+            res.json(result);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "LIVE ANALYSIS ERROR:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message
+
+            });
+        }
+    }
+);
+// =====================================
+// LIVE BTC/USD AUTOMATIC ANALYSIS
+// =====================================
+
+const LIVE_INTERVALS = {
+    "5m": 5 * 60,
+    "30m": 30 * 60,
+    "1h": 60 * 60,
+    "4h": 4 * 60 * 60
+};
+
+// -------------------------------------
+// DOWNLOAD RECENT CANDLES
+// -------------------------------------
+
+async function getRecentCandles(resolution, count = 100) {
+
+    const intervalSeconds =
+        LIVE_INTERVALS[resolution];
+
+    if (!intervalSeconds) {
+        throw new Error(
+            `Unsupported resolution: ${resolution}`
+        );
+    }
+
+    const now =
+        Math.floor(Date.now() / 1000);
+
+    const start =
+        now -
+        (count * intervalSeconds);
+
+    const url =
+        DELTA_API +
+        `?resolution=${encodeURIComponent(resolution)}` +
+        `&symbol=${encodeURIComponent(SYMBOL)}` +
+        `&start=${start}` +
+        `&end=${now}`;
+
+    const response =
+        await fetch(url, {
+            headers: {
+                Accept: "application/json"
+            }
+        });
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text();
+
+        throw new Error(
+            `${resolution} API error ${response.status}: ${errorText}`
+        );
+    }
+
+    const data =
+        await response.json();
+
+    if (
+        !Array.isArray(data.result)
+    ) {
+
+        throw new Error(
+            `${resolution}: candle data not available`
+        );
+    }
+
+    const candles =
+        data.result
+            .map(normalizeCandle)
+            .sort(
+                (a, b) =>
+                    a.time - b.time
+            );
+
+    for (const candle of candles) {
+
+        candle.intervalSeconds =
+            intervalSeconds;
+    }
+
+    return candles;
+}
+
+// -------------------------------------
+// GET LAST CLOSED CANDLE
+// -------------------------------------
+
+function getLastClosedCandle(candles) {
+
+    if (!candles.length) {
+        return null;
+    }
+
+    const now =
+        Math.floor(Date.now() / 1000);
+
+    for (
+        let i = candles.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        const candle =
+            candles[i];
+
+        if (
+            candle.time +
+            candle.intervalSeconds
+            <= now
+        ) {
+
+            return {
+                candle,
+                index: i
+            };
+        }
+    }
+
+    return null;
+}
+
+// -------------------------------------
+// LIVE ANALYSIS
+// -------------------------------------
+
+app.get(
+    "/live-analysis",
+    async (req, res) => {
+
+        try {
+
+            console.log("");
+            console.log(
+                "================================="
+            );
+            console.log(
+                "LIVE BTC/USD ANALYSIS"
+            );
+            console.log(
+                "================================="
+            );
+
+            // -----------------------------
+            // DOWNLOAD TIMEFRAMES
+            // -----------------------------
+
+            const candles5m =
+                await getRecentCandles(
+                    "5m",
+                    100
+                );
+
+            const candles30m =
+                await getRecentCandles(
+                    "30m",
+                    100
+                );
+
+            const candles1h =
+                await getRecentCandles(
+                    "1h",
+                    100
+                );
+
+            const candles4h =
+                await getRecentCandles(
+                    "4h",
+                    100
+                );
+
+            // -----------------------------
+            // EMA
+            // -----------------------------
+
+            const ema5m9 =
+                calculateEMA(
+                    candles5m,
+                    9
+                );
+
+            const ema5m26 =
+                calculateEMA(
+                    candles5m,
+                    26
+                );
+
+            const ema30m9 =
+                calculateEMA(
+                    candles30m,
+                    9
+                );
+
+            const ema30m26 =
+                calculateEMA(
+                    candles30m,
+                    26
+                );
+
+            const ema1h9 =
+                calculateEMA(
+                    candles1h,
+                    9
+                );
+
+            const ema1h26 =
+                calculateEMA(
+                    candles1h,
+                    26
+                );
+
+            const ema4h9 =
+                calculateEMA(
+                    candles4h,
+                    9
+                );
+
+            const ema4h26 =
+                calculateEMA(
+                    candles4h,
+                    26
+                );
+
+            // -----------------------------
+            // LAST CLOSED CANDLES
+            // -----------------------------
+
+            const closed5m =
+                getLastClosedCandle(
+                    candles5m
+                );
+
+            const closed30m =
+                getLastClosedCandle(
+                    candles30m
+                );
+
+            const closed1h =
+                getLastClosedCandle(
+                    candles1h
+                );
+
+            const closed4h =
+                getLastClosedCandle(
+                    candles4h
+                );
+
+            if (
+                !closed5m ||
+                !closed30m ||
+                !closed1h ||
+                !closed4h
+            ) {
+
+                throw new Error(
+                    "Not enough closed candles."
+                );
+            }
+
+            const i5 =
+                closed5m.index;
+
+            const i30 =
+                closed30m.index;
+
+            const i1 =
+                closed1h.index;
+
+            const i4 =
+                closed4h.index;
+
+            // -----------------------------
+            // TREND
+            // -----------------------------
+
+            const trend4h =
+                ema4h9[i4] >
+                ema4h26[i4]
+                    ? "BULLISH"
+                    : "BEARISH";
+
+            const trend1h =
+                ema1h9[i1] >
+                ema1h26[i1]
+                    ? "BULLISH"
+                    : "BEARISH";
+
+            // -----------------------------
+            // 30M CROSSOVER
+            // -----------------------------
+
+            let crossover =
+                "NONE";
+
+            if (
+                i30 >= 1 &&
+                ema30m9[i30 - 1] <=
+                ema30m26[i30 - 1] &&
+                ema30m9[i30] >
+                ema30m26[i30]
+            ) {
+
+                crossover =
+                    "BULLISH";
+
+            }
+
+            if (
+                i30 >= 1 &&
+                ema30m9[i30 - 1] >=
+                ema30m26[i30 - 1] &&
+                ema30m9[i30] <
+                ema30m26[i30]
+            ) {
+
+                crossover =
+                    "BEARISH";
+            }
+
+            // -----------------------------
+            // 5M CONFIRMATION
+            // -----------------------------
+
+            let confirmation =
+                "NOT CONFIRMED";
+
+            if (
+                i5 >= 1 &&
+                ema5m9[i5] >
+                ema5m26[i5]
+            ) {
+
+                if (
+                    trend4h === "BULLISH" &&
+                    trend1h === "BULLISH" &&
+                    ema30m9[i30] >
+                    ema30m26[i30]
+                ) {
+
+                    confirmation =
+                        "BULLISH";
+                }
+            }
+
+            if (
+                i5 >= 1 &&
+                ema5m9[i5] <
+                ema5m26[i5]
+            ) {
+
+                if (
+                    trend4h === "BEARISH" &&
+                    trend1h === "BEARISH" &&
+                    ema30m9[i30] <
+                    ema30m26[i30]
+                ) {
+
+                    confirmation =
+                        "BEARISH";
+                }
+            }
+
+            // -----------------------------
+            // FINAL SIGNAL
+            // -----------------------------
+
+            let signal =
+                "NO TRADE";
+
+            if (
+                trend4h === "BULLISH" &&
+                trend1h === "BULLISH" &&
+                ema30m9[i30] >
+                ema30m26[i30] &&
+                confirmation === "BULLISH"
+            ) {
+
+                signal =
+                    "BUY";
+            }
+
+            if (
+                trend4h === "BEARISH" &&
+                trend1h === "BEARISH" &&
+                ema30m9[i30] <
+                ema30m26[i30] &&
+                confirmation === "BEARISH"
+            ) {
+
+                signal =
+                    "SELL";
+            }
+
+            // -----------------------------
+            // PRICE
+            // -----------------------------
+
+            const price =
+                candles5m[
+                    candles5m.length - 1
+                ].close;
+
+            // -----------------------------
+            // SIMPLE STRUCTURE LEVELS
+            // -----------------------------
+
+            const recent30 =
+                candles30m.slice(-20);
+
+            const support =
+                Math.min(
+                    ...recent30.map(
+                        c => c.low
+                    )
+                );
+
+            const resistance =
+                Math.max(
+                    ...recent30.map(
+                        c => c.high
+                    )
+                );
+
+            // -----------------------------
+            // ENTRY / SL / TARGET
+            // -----------------------------
+
+            let entry = null;
+            let stopLoss = null;
+            let target = null;
+
+            if (signal === "BUY") {
+
+                entry =
+                    price;
+
+                stopLoss =
+                    support;
+
+                const risk =
+                    entry - stopLoss;
+
+                if (risk > 0) {
+
+                    target =
+                        entry +
+                        risk * 2;
+
+                } else {
+
+                    signal =
+                        "NO TRADE";
+                }
+            }
+
+            if (signal === "SELL") {
+
+                entry =
+                    price;
+
+                stopLoss =
+                    resistance;
+
+                const risk =
+                    stopLoss - entry;
+
+                if (risk > 0) {
+
+                    target =
+                        entry -
+                        risk * 2;
+
+                } else {
+
+                    signal =
+                        "NO TRADE";
+                }
+            }
+
+            // -----------------------------
+            // RESPONSE
+            // -----------------------------
+
+            const result = {
+
+                success: true,
+
+                symbol: SYMBOL,
+
+                signal,
+
+                price:
+                    Number(
+                        price.toFixed(2)
+                    ),
+
+                entry:
+                    entry !== null
+                        ? Number(
+                            entry.toFixed(2)
+                        )
+                        : null,
+
+                stopLoss:
+                    stopLoss !== null
+                        ? Number(
+                            stopLoss.toFixed(2)
+                        )
+                        : null,
+
+                target:
+                    target !== null
+                        ? Number(
+                            target.toFixed(2)
+                        )
+                        : null,
+
+                trend4h,
+
+                trend1h,
+
+                confirmation,
+
+                support:
+                    Number(
+                        support.toFixed(2)
+                    ),
+
+                resistance:
+                    Number(
+                        resistance.toFixed(2)
+                    ),
+
+                candleTime:
+                    new Date(
+                        closed5m.candle.time *
+                        1000
+                    ).toISOString(),
+
+                updatedAt:
+                    new Date().toISOString()
+            };
+
+            console.log(
+                JSON.stringify(
+                    result,
+                    null,
+                    2
+                )
+            );
+
+            res.json(result);
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "LIVE ANALYSIS ERROR:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message
+
+            });
+        }
+    }
+);
+// =====================================
 // START SERVER
 // =====================================
 
