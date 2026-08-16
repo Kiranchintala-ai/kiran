@@ -1,1 +1,181 @@
+* {
+    box-sizing: border-box;
+}
 
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+    background: #f4f7fb;
+    color: #1f2937;
+}
+
+.container {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    text-align: center;
+    color: #6b7280;
+    margin-bottom: 25px;
+}
+
+.chart-card {
+    background: white;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+}
+
+.chart-card h2 {
+    margin-top: 0;
+}
+
+.chart-card p {
+    color: #6b7280;
+}
+
+input[type="file"] {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+.preview {
+    display: none;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 15px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+}
+
+.buttons {
+    display: flex;
+    gap: 12px;
+    margin: 25px 0;
+}
+
+button {
+    border: none;
+    border-radius: 10px;
+    padding: 14px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.analyze-btn {
+    flex: 1;
+    background: #2563eb;
+    color: white;
+}
+
+.analyze-btn:hover {
+    background: #1d4ed8;
+}
+
+.analyze-btn:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
+.clear-btn {
+    background: #e5e7eb;
+    color: #111827;
+}
+
+.clear-btn:hover {
+    background: #d1d5db;
+}
+
+.status {
+    display: block;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.error {
+    display: block;
+    background: #fee2e2;
+    color: #991b1b;
+    padding: 14px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.result-card {
+    background: white;
+    padding: 22px;
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+    margin-bottom: 30px;
+}
+
+.result-card h2 {
+    margin-top: 0;
+}
+
+.result-row {
+    padding: 13px 0;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 16px;
+}
+
+.result-row:last-child {
+    border-bottom: none;
+}
+
+#signal {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+#signal.buy {
+    color: #15803d;
+}
+
+#signal.sell {
+    color: #dc2626;
+}
+
+#signal.no-trade {
+    color: #d97706;
+}
+
+@media (max-width: 600px) {
+
+    body {
+        padding: 12px;
+    }
+
+    h1 {
+        font-size: 26px;
+    }
+
+    .chart-card,
+    .result-card {
+        padding: 16px;
+    }
+
+    .buttons {
+        flex-direction: column;
+    }
+
+    button {
+        width: 100%;
+    }
+}
