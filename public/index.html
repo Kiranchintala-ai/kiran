@@ -19,201 +19,148 @@
 
 <body>
 
-    <div class="container">
+<div class="container">
 
-        <h1>📈 AI Trading Assistant</h1>
+    <h1>📈 AI Trading Assistant</h1>
 
-        <p class="subtitle">
-            BTC/USD Multi-Timeframe Chart Analysis
-        </p>
-
-
-        <!-- ========================= -->
-        <!-- 1H -->
-        <!-- ========================= -->
-
-        <div class="chart-card">
-
-            <h2>🕐 1H Chart</h2>
-
-            <p>
-                Higher Timeframe Trend
-            </p>
-
-            <input
-                type="file"
-                id="chart1H"
-                accept="image/*"
-            >
-
-            <img
-                id="preview1H"
-                class="preview"
-                alt="1H Chart Preview"
-            >
-
-        </div>
+    <p class="subtitle">
+        BTC/USD Live Multi-Timeframe Analysis
+    </p>
 
 
-        <!-- ========================= -->
-        <!-- 30M -->
-        <!-- ========================= -->
+    <!-- LIVE PRICE -->
 
-        <div class="chart-card">
+    <div class="result-card">
 
-            <h2>🕧 30M Chart</h2>
-
-            <p>
-                Main Setup
-            </p>
-
-            <input
-                type="file"
-                id="chart30M"
-                accept="image/*"
-            >
-
-            <img
-                id="preview30M"
-                class="preview"
-                alt="30M Chart Preview"
-            >
-
-        </div>
-
-
-        <!-- ========================= -->
-        <!-- 5M -->
-        <!-- ========================= -->
-
-        <div class="chart-card">
-
-            <h2>🕔 5M Chart</h2>
-
-            <p>
-                Entry Confirmation
-            </p>
-
-            <input
-                type="file"
-                id="chart5M"
-                accept="image/*"
-            >
-
-            <img
-                id="preview5M"
-                class="preview"
-                alt="5M Chart Preview"
-            >
-
-        </div>
-
-
-        <!-- ========================= -->
-        <!-- BUTTONS -->
-        <!-- ========================= -->
-
-        <div class="buttons">
-
-            <button
-                onclick="analyzeChart()"
-                class="analyze-btn"
-            >
-                🔍 Analyze Charts
-            </button>
-
-            <button
-                onclick="clearResult()"
-                class="clear-btn"
-            >
-                🗑️ Clear
-            </button>
-
-        </div>
-
-
-        <!-- ========================= -->
-        <!-- STATUS -->
-        <!-- ========================= -->
-
-        <div id="result"></div>
-
-
-        <!-- ========================= -->
-        <!-- TRADING DECISION -->
-        <!-- ========================= -->
+        <h2>💰 Live BTC/USD</h2>
 
         <div
-            id="tradingDecision"
-            class="result-card"
+            id="price"
+            class="result-row"
         >
+            Price: -
+        </div>
 
-            <h2>📊 Trading Decision</h2>
-
-
-            <div
-                id="signal"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="entry"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="stoploss"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="target"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="reason"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="confirmation"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="trend"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="support"
-                class="result-row"
-            ></div>
-
-
-            <div
-                id="resistance"
-                class="result-row"
-            ></div>
-
+        <div
+            id="updated"
+            class="result-row"
+        >
+            Updated: -
         </div>
 
     </div>
 
 
-    <!-- ========================= -->
-    <!-- JAVASCRIPT -->
-    <!-- ========================= -->
+    <!-- TREND -->
 
-    <script src="script.js"></script>
+    <div class="result-card">
+
+        <h2>📊 Market Trend</h2>
+
+        <div
+            id="trend4h"
+            class="result-row"
+        >
+            4H Trend: -
+        </div>
+
+        <div
+            id="trend1h"
+            class="result-row"
+        >
+            1H Trend: -
+        </div>
+
+    </div>
+
+
+    <!-- EMA -->
+
+    <div class="result-card">
+
+        <h2>📈 EMA 9 / EMA 26</h2>
+
+        <div
+            id="crossover"
+            class="result-row"
+        >
+            30M Crossover: -
+        </div>
+
+        <div
+            id="confirmation"
+            class="result-row"
+        >
+            5M Confirmation: -
+        </div>
+
+    </div>
+
+
+    <!-- SIGNAL -->
+
+    <div
+        id="tradingDecision"
+        class="result-card"
+    >
+
+        <h2>🚦 Trading Decision</h2>
+
+        <div
+            id="signal"
+            class="result-row"
+        >
+            Signal: -
+        </div>
+
+        <div
+            id="support"
+            class="result-row"
+        >
+            Support: -
+        </div>
+
+        <div
+            id="resistance"
+            class="result-row"
+        >
+            Resistance: -
+        </div>
+
+    </div>
+
+
+    <!-- STATUS -->
+
+    <div
+        id="result"
+        class="status"
+    >
+        🔄 Connecting to live market...
+    </div>
+
+
+    <!-- NOTIFICATION -->
+
+    <div
+        id="notification"
+        class="notification"
+        style="display:none;"
+    ></div>
+
+
+    <button
+        id="refreshBtn"
+        onclick="getLiveAnalysis()"
+        class="analyze-btn"
+    >
+        🔄 Refresh Analysis
+    </button>
+
+</div>
+
+
+<script src="script.js"></script>
 
 </body>
 
