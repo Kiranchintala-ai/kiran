@@ -61,7 +61,6 @@ if (fs.existsSync(publicFolder)) {
 // =====================================
 
 app.get("/", (req, res) => {
-
     const indexPath = path.join(
         publicFolder,
         "index.html"
@@ -79,14 +78,12 @@ app.get("/", (req, res) => {
 // =====================================
 
 app.get("/health", (req, res) => {
-
     res.json({
         success: true,
         message: "AI Trading Server is running",
         model: MODEL,
         time: new Date().toISOString()
     });
-
 });
 
 // =====================================
@@ -94,26 +91,18 @@ app.get("/health", (req, res) => {
 // =====================================
 
 app.get("/test-ai", async (req, res) => {
-
     try {
-
         const response =
             await ai.models.generateContent({
-
                 model: MODEL,
-
                 contents:
                     "Reply with only one word: SUCCESS"
-
             });
 
         res.json({
-
             success: true,
-
             reply:
                 response.text || "SUCCESS"
-
         });
 
     } catch (error) {
@@ -124,16 +113,10 @@ app.get("/test-ai", async (req, res) => {
         );
 
         res.status(500).json({
-
             success: false,
-
-            error:
-                error.message
-
+            error: error.message
         });
-
     }
-
 });
 
 // =====================================
@@ -142,9 +125,7 @@ app.get("/test-ai", async (req, res) => {
 
 function cleanBase64(image) {
 
-    if (
-        typeof image !== "string"
-    ) {
+    if (typeof image !== "string") {
         return image;
     }
 
@@ -152,7 +133,6 @@ function cleanBase64(image) {
         /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
         ""
     );
-
 }
 
 // =====================================
@@ -169,10 +149,6 @@ app.post("/analyze", async (req, res) => {
             image5M
         } = req.body;
 
-        // -----------------------------
-        // CHECK IMAGES
-        // -----------------------------
-
         if (
             !image1H ||
             !image30M ||
@@ -180,14 +156,10 @@ app.post("/analyze", async (req, res) => {
         ) {
 
             return res.status(400).json({
-
                 success: false,
-
                 error:
                     "Please upload all 3 charts: 1H, 30M and 5M."
-
             });
-
         }
 
         const chart1H =
@@ -198,10 +170,6 @@ app.post("/analyze", async (req, res) => {
 
         const chart5M =
             cleanBase64(image5M);
-
-        // -----------------------------
-        // AI PROMPT
-        // -----------------------------
 
         const prompt = `
 
@@ -291,12 +259,7 @@ EMA values
 Long explanations
 Markdown
 Tables
-
 `;
-
-        // -----------------------------
-        // SEND IMAGES TO GEMINI
-        // -----------------------------
 
         const response =
             await ai.models.generateContent({
@@ -312,15 +275,9 @@ Tables
 
                     {
                         inlineData: {
-
-                            mimeType:
-                                "image/png",
-
-                            data:
-                                chart1H
-
+                            mimeType: "image/png",
+                            data: chart1H
                         }
-
                     },
 
                     {
@@ -330,15 +287,9 @@ Tables
 
                     {
                         inlineData: {
-
-                            mimeType:
-                                "image/png",
-
-                            data:
-                                chart30M
-
+                            mimeType: "image/png",
+                            data: chart30M
                         }
-
                     },
 
                     {
@@ -348,24 +299,16 @@ Tables
 
                     {
                         inlineData: {
-
-                            mimeType:
-                                "image/png",
-
-                            data:
-                                chart5M
-
+                            mimeType: "image/png",
+                            data: chart5M
                         }
-
                     },
 
                     {
-                        text:
-                            prompt
+                        text: prompt
                     }
 
                 ]
-
             });
 
         const text =
@@ -392,13 +335,16 @@ Tables
 
         function getValue(label) {
 
+            const escapedLabel =
+                label.replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    "\\$&"
+                );
+
             const regex =
                 new RegExp(
                     "^\\s*" +
-                    label.replace(
-                        /[.*+?^${}()|[\]\\]/g,
-                        "\\$&"
-                    ) +
+                    escapedLabel +
                     "\\s*:\\s*(.+)$",
                     "im"
                 );
@@ -409,7 +355,6 @@ Tables
             return match
                 ? match[1].trim()
                 : "-";
-
         }
 
         // =================================
@@ -449,7 +394,6 @@ Tables
 
             raw:
                 text
-
         });
 
     } catch (error) {
@@ -465,11 +409,8 @@ Tables
 
             error:
                 error.message
-
         });
-
     }
-
 });
 
 // =====================================
@@ -489,7 +430,6 @@ const LIVE_INTERVALS = {
 
     "4h":
         4 * 60 * 60
-
 };
 
 // =====================================
@@ -514,9 +454,7 @@ function normalizeCandle(candle) {
 
         close:
             Number(candle.close)
-
     };
-
 }
 
 // =====================================
@@ -536,7 +474,6 @@ async function getRecentCandles(
         throw new Error(
             `Unsupported resolution: ${resolution}`
         );
-
     }
 
     const now =
@@ -574,7 +511,6 @@ async function getRecentCandles(
         throw new Error(
             `${resolution} API error ${response.status}: ${errorText}`
         );
-
     }
 
     const data =
@@ -589,7 +525,6 @@ async function getRecentCandles(
         throw new Error(
             `${resolution}: candle data unavailable`
         );
-
     }
 
     const candles =
@@ -607,11 +542,9 @@ async function getRecentCandles(
 
         candle.intervalSeconds =
             interval;
-
     }
 
     return candles;
-
 }
 
 // =====================================
@@ -628,7 +561,6 @@ function getLastClosedCandle(
     ) {
 
         return null;
-
     }
 
     const now =
@@ -657,15 +589,11 @@ function getLastClosedCandle(
                 candle,
 
                 index: i
-
             };
-
         }
-
     }
 
     return null;
-
 }
 
 // =====================================
@@ -683,7 +611,6 @@ function calculateEMA(
     ) {
 
         return [];
-
     }
 
     const ema =
@@ -701,7 +628,6 @@ function calculateEMA(
 
         sum +=
             candles[i].close;
-
     }
 
     let previous =
@@ -736,11 +662,74 @@ function calculateEMA(
 
         previous =
             value;
-
     }
 
     return ema;
+}
 
+// =====================================
+// CROSSOVER DETECTOR
+// =====================================
+
+function detectCrossover(
+    fastEMA,
+    slowEMA,
+    index
+) {
+
+    if (
+        !Array.isArray(fastEMA) ||
+        !Array.isArray(slowEMA)
+    ) {
+
+        return "NONE";
+    }
+
+    if (index < 1) {
+        return "NONE";
+    }
+
+    const previousFast =
+        fastEMA[index - 1];
+
+    const previousSlow =
+        slowEMA[index - 1];
+
+    const currentFast =
+        fastEMA[index];
+
+    const currentSlow =
+        slowEMA[index];
+
+    if (
+        previousFast === null ||
+        previousSlow === null ||
+        currentFast === null ||
+        currentSlow === null
+    ) {
+
+        return "NONE";
+    }
+
+    // EMA9 crosses ABOVE EMA26
+    if (
+        previousFast <= previousSlow &&
+        currentFast > currentSlow
+    ) {
+
+        return "BULLISH";
+    }
+
+    // EMA9 crosses BELOW EMA26
+    if (
+        previousFast >= previousSlow &&
+        currentFast < currentSlow
+    ) {
+
+        return "BEARISH";
+    }
+
+    return "NONE";
 }
 
 // =====================================
@@ -752,6 +741,10 @@ app.get(
     async (req, res) => {
 
         try {
+
+            // ---------------------------------
+            // GET CANDLES
+            // ---------------------------------
 
             const candles5m =
                 await getRecentCandles(
@@ -777,9 +770,9 @@ app.get(
                     100
                 );
 
-            // -----------------------------
-            // EMA
-            // -----------------------------
+            // ---------------------------------
+            // CALCULATE EMA
+            // ---------------------------------
 
             const ema5m9 =
                 calculateEMA(
@@ -829,9 +822,9 @@ app.get(
                     26
                 );
 
-            // -----------------------------
+            // ---------------------------------
             // CLOSED CANDLES
-            // -----------------------------
+            // ---------------------------------
 
             const closed5m =
                 getLastClosedCandle(
@@ -863,7 +856,6 @@ app.get(
                 throw new Error(
                     "Not enough closed candles"
                 );
-
             }
 
             const i5 =
@@ -878,9 +870,9 @@ app.get(
             const i4 =
                 closed4h.index;
 
-            // -----------------------------
-            // TREND
-            // -----------------------------
+            // ---------------------------------
+            // 4H TREND
+            // ---------------------------------
 
             const trend4h =
                 ema4h9[i4] >
@@ -888,48 +880,82 @@ app.get(
                     ? "BULLISH"
                     : "BEARISH";
 
+            // ---------------------------------
+            // 1H TREND
+            // ---------------------------------
+
             const trend1h =
                 ema1h9[i1] >
                 ema1h26[i1]
                     ? "BULLISH"
                     : "BEARISH";
 
-            // -----------------------------
-            // 30M CROSSOVER
-            // -----------------------------
+            // ---------------------------------
+            // 30M EMA TREND
+            // ---------------------------------
 
-            let crossover =
-                "NONE";
+            let ema30mTrend =
+                "SIDEWAYS";
 
             if (
-                i30 >= 1 &&
-                ema30m9[i30 - 1] <=
-                ema30m26[i30 - 1] &&
                 ema30m9[i30] >
                 ema30m26[i30]
             ) {
 
-                crossover =
+                ema30mTrend =
                     "BULLISH";
-
             }
 
             if (
-                i30 >= 1 &&
-                ema30m9[i30 - 1] >=
-                ema30m26[i30 - 1] &&
                 ema30m9[i30] <
                 ema30m26[i30]
             ) {
 
-                crossover =
+                ema30mTrend =
                     "BEARISH";
+            }
+
+            // ---------------------------------
+            // 30M NEW CROSSOVER
+            // ---------------------------------
+
+            const crossover =
+                detectCrossover(
+                    ema30m9,
+                    ema30m26,
+                    i30
+                );
+
+            // ---------------------------------
+            // CROSSOVER ALERT
+            // ---------------------------------
+
+            let alert =
+                "NONE";
+
+            if (
+                crossover ===
+                "BULLISH"
+            ) {
+
+                alert =
+                    "🟢 BUY CROSSOVER — EMA9 crossed ABOVE EMA26 on 30M";
 
             }
 
-            // -----------------------------
+            if (
+                crossover ===
+                "BEARISH"
+            ) {
+
+                alert =
+                    "🔴 SELL CROSSOVER — EMA9 crossed BELOW EMA26 on 30M";
+
+            }
+
+            // ---------------------------------
             // 5M CONFIRMATION
-            // -----------------------------
+            // ---------------------------------
 
             let confirmation =
                 "NOT CONFIRMED";
@@ -937,41 +963,45 @@ app.get(
             if (
                 ema5m9[i5] >
                 ema5m26[i5] &&
-                trend4h === "BULLISH" &&
-                trend1h === "BULLISH" &&
+                trend4h ===
+                "BULLISH" &&
+                trend1h ===
+                "BULLISH" &&
                 ema30m9[i30] >
                 ema30m26[i30]
             ) {
 
                 confirmation =
                     "BULLISH";
-
             }
 
             if (
                 ema5m9[i5] <
                 ema5m26[i5] &&
-                trend4h === "BEARISH" &&
-                trend1h === "BEARISH" &&
+                trend4h ===
+                "BEARISH" &&
+                trend1h ===
+                "BEARISH" &&
                 ema30m9[i30] <
                 ema30m26[i30]
             ) {
 
                 confirmation =
                     "BEARISH";
-
             }
 
-            // -----------------------------
+            // ---------------------------------
             // FINAL SIGNAL
-            // -----------------------------
+            // ---------------------------------
 
             let signal =
                 "NO TRADE";
 
             if (
-                trend4h === "BULLISH" &&
-                trend1h === "BULLISH" &&
+                trend4h ===
+                "BULLISH" &&
+                trend1h ===
+                "BULLISH" &&
                 ema30m9[i30] >
                 ema30m26[i30] &&
                 confirmation ===
@@ -980,12 +1010,13 @@ app.get(
 
                 signal =
                     "BUY";
-
             }
 
             if (
-                trend4h === "BEARISH" &&
-                trend1h === "BEARISH" &&
+                trend4h ===
+                "BEARISH" &&
+                trend1h ===
+                "BEARISH" &&
                 ema30m9[i30] <
                 ema30m26[i30] &&
                 confirmation ===
@@ -994,19 +1025,18 @@ app.get(
 
                 signal =
                     "SELL";
-
             }
 
-            // -----------------------------
+            // ---------------------------------
             // PRICE
-            // -----------------------------
+            // ---------------------------------
 
             const price =
                 closed5m.candle.close;
 
-            // -----------------------------
+            // ---------------------------------
             // SUPPORT / RESISTANCE
-            // -----------------------------
+            // ---------------------------------
 
             const recent30 =
                 candles30m.slice(-20);
@@ -1025,9 +1055,9 @@ app.get(
                     )
                 );
 
-            // -----------------------------
+            // ---------------------------------
             // RESPONSE
-            // -----------------------------
+            // ---------------------------------
 
             res.json({
 
@@ -1047,7 +1077,11 @@ app.get(
 
                 trend1h,
 
+                ema30mTrend,
+
                 crossover,
+
+                alert,
 
                 confirmation,
 
@@ -1067,9 +1101,16 @@ app.get(
                         1000
                     ).toISOString(),
 
+                crossoverCandleTime:
+                    crossover !== "NONE"
+                        ? new Date(
+                            closed30m.candle.time *
+                            1000
+                        ).toISOString()
+                        : null,
+
                 updatedAt:
                     new Date().toISOString()
-
             });
 
         } catch (error) {
@@ -1085,11 +1126,8 @@ app.get(
 
                 error:
                     error.message
-
             });
-
         }
-
     }
 );
 
@@ -1103,44 +1141,55 @@ app.listen(
     () => {
 
         console.log("");
-        console.log(
-            "================================="
-        );
-        console.log(
-            "AI TRADING SERVER RUNNING"
-        );
-        console.log(
-            "================================="
-        );
-        console.log(
-            "HOME       = /"
-        );
-        console.log(
-            "HEALTH     = /health"
-        );
-        console.log(
-            "TEST AI    = /test-ai"
-        );
-        console.log(
-            "IMAGE AI   = /analyze"
-        );
-        console.log(
-            "LIVE AI    = /live-analysis"
-        );
-        console.log(
-            "================================="
-        );
-        console.log(
-            "MODEL =",
-            MODEL
-        );
-        console.log(
-            "PORT =",
-            PORT
-        );
+
         console.log(
             "================================="
         );
 
+        console.log(
+            "AI TRADING SERVER RUNNING"
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "HOME       = /"
+        );
+
+        console.log(
+            "HEALTH     = /health"
+        );
+
+        console.log(
+            "TEST AI    = /test-ai"
+        );
+
+        console.log(
+            "IMAGE AI   = /analyze"
+        );
+
+        console.log(
+            "LIVE AI    = /live-analysis"
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "MODEL =",
+            MODEL
+        );
+
+        console.log(
+            "PORT =",
+            PORT
+        );
+
+        console.log(
+            "================================="
+        );
     }
 );
