@@ -1,1 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <title>AI Trading Assistant</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>📈 AI Trading Assistant</h1>
+
+    <p class="subtitle">
+        BTC/USD Multi-Timeframe Technical Analysis
+    </p>
+
+    <div class="upload-grid">
+
+        <!-- 1H -->
+        <div class="chart-box">
+
+            <h2>🕐 1H Chart</h2>
+
+            <p>Higher Timeframe Trend</p>
+
+            <input
+                type="file"
+                id="chart1H"
+                accept="image/*"
+            >
+
+            <img
+                id="preview1H"
+                class="preview"
+            >
+
+        </div>
+
+
+        <!-- 30M -->
+        <div class="chart-box">
+
+            <h2>🕧 30M Chart</h2>
+
+            <p>Main Setup</p>
+
+            <input
+                type="file"
+                id="chart30M"
+                accept="image/*"
+            >
+
+            <img
+                id="preview30M"
+                class="preview"
+            >
+
+        </div>
+
+
+        <!-- 5M -->
+        <div class="chart-box">
+
+            <h2>🕔 5M Chart</h2>
+
+            <p>Entry Confirmation</p>
+
+            <input
+                type="file"
+                id="chart5M"
+                accept="image/*"
+            >
+
+            <img
+                id="preview5M"
+                class="preview"
+            >
+
+        </div>
+
+    </div>
+
+
+    <div class="buttons">
+
+        <button
+            class="analyze-btn"
+            onclick="analyzeChart()"
+        >
+            🔍 Analyze Charts
+        </button>
+
+        <button
+            class="clear-btn"
+            onclick="clearResult()"
+        >
+            Clear
+        </button>
+
+    </div>
+
+
+    <!-- RESULT -->
+
+    <div id="result" class="result-box">
+
+        <h2>📊 Trading Decision</h2>
+
+        <div class="result-row">
+            <strong>Signal:</strong>
+            <span id="signal">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Entry:</strong>
+            <span id="entry">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Stop Loss:</strong>
+            <span id="stoploss">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Target:</strong>
+            <span id="target">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Trend:</strong>
+            <span id="trend">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Support:</strong>
+            <span id="support">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Resistance:</strong>
+            <span id="resistance">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Reason:</strong>
+            <span id="reason">-</span>
+        </div>
+
+        <div class="result-row">
+            <strong>Confirmation:</strong>
+            <span id="confirmation">-</span>
+        </div>
+
+    </div>
+
+</div>
+
+
+<script src="script.js"></script>
+
+</body>
+</html>
