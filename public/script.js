@@ -2,6 +2,10 @@
 // AI TRADING ASSISTANT - FRONTEND
 // ==========================================
 
+// IMPORTANT:
+// This is your Node/Express backend on Render.
+const API_BASE_URL = "https://kiran-ai-server.onrender.com";
+
 let image1H = null;
 let image30M = null;
 let image5M = null;
@@ -32,6 +36,7 @@ function readImage(file) {
 
         reader.readAsDataURL(file);
     });
+
 }
 
 
@@ -45,6 +50,7 @@ function setupImageInput(inputId, previewId, type) {
     const preview = document.getElementById(previewId);
 
     if (!input || !preview) {
+        console.error("Missing:", inputId, previewId);
         return;
     }
 
@@ -75,6 +81,10 @@ function setupImageInput(inputId, previewId, type) {
                 image5M = image;
             }
 
+            showStatus(
+                `✅ ${type} chart uploaded`
+            );
+
         } catch (error) {
 
             console.error(error);
@@ -83,14 +93,16 @@ function setupImageInput(inputId, previewId, type) {
                 "❌ Could not load image.",
                 true
             );
+
         }
 
     });
+
 }
 
 
 // ==========================================
-// SETUP ALL THREE CHART INPUTS
+// SETUP THREE CHART INPUTS
 // ==========================================
 
 setupImageInput(
@@ -129,11 +141,9 @@ function showStatus(message, error = false) {
 
     result.style.display = "block";
 
-    if (error) {
-        result.className = "error";
-    } else {
-        result.className = "status";
-    }
+    result.className =
+        error ? "error" : "status";
+
 }
 
 
@@ -144,7 +154,7 @@ function showStatus(message, error = false) {
 async function analyzeChart() {
 
     // --------------------------------------
-    // CHECK ALL THREE IMAGES
+    // CHECK THREE IMAGES
     // --------------------------------------
 
     if (!image1H || !image30M || !image5M) {
@@ -159,16 +169,23 @@ async function analyzeChart() {
 
 
     // --------------------------------------
-    // SHOW LOADING
+    // FIND ANALYZE BUTTON
+    // --------------------------------------
+
+    const analyzeButton =
+        document.querySelector(
+            'button[onclick="analyzeChart()"]'
+        );
+
+
+    // --------------------------------------
+    // LOADING
     // --------------------------------------
 
     showStatus(
-        "🔄 Analyzing 1H + 30M + 5M charts..."
+        "🔄 Sending charts to AI..."
     );
 
-
-    const analyzeButton =
-        document.querySelector(".analyze-btn");
 
     if (analyzeButton) {
 
@@ -176,68 +193,101 @@ async function analyzeChart() {
 
         analyzeButton.textContent =
             "⏳ Analyzing...";
+
     }
 
 
     try {
 
         // ----------------------------------
-        // SEND TO SERVER
+        // BACKEND URL
+        // ----------------------------------
+
+        const url =
+            API_BASE_URL + "/analyze";
+
+
+        console.log(
+            "Sending charts to:",
+            url
+        );
+
+
+        // ----------------------------------
+        // SEND THREE IMAGES
         // ----------------------------------
 
         const response =
-            await fetch("/analyze", {
+            await fetch(
+                url,
+                {
+                    method: "POST",
 
-                method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
+                    body: JSON.stringify({
 
-                body: JSON.stringify({
+                        image1H: image1H,
 
-                    image1H: image1H,
+                        image30M: image30M,
 
-                    image30M: image30M,
+                        image5M: image5M
 
-                    image5M: image5M
+                    })
 
-                })
-
-            });
+                }
+            );
 
 
         // ----------------------------------
-        // READ RESPONSE
+        // READ SERVER RESPONSE
         // ----------------------------------
 
-        const data =
-            await response.json();
+        let data;
+
+        try {
+
+            data =
+                await response.json();
+
+        } catch (jsonError) {
+
+            throw new Error(
+                "Server returned an invalid response."
+            );
+
+        }
 
 
         // ----------------------------------
         // SERVER ERROR
         // ----------------------------------
 
-        if (!response.ok || !data.success) {
+        if (
+            !response.ok ||
+            !data.success
+        ) {
 
             throw new Error(
                 data.error ||
-                "Analysis failed"
+                `Server error: ${response.status}`
             );
+
         }
 
 
         // ----------------------------------
-        // DISPLAY RESULTS
+        // DISPLAY RESULT
         // ----------------------------------
 
         displayResult(data);
 
 
         showStatus(
-            "✅ Analysis completed."
+            "✅ AI analysis completed."
         );
 
 
@@ -259,13 +309,16 @@ async function analyzeChart() {
 
         if (analyzeButton) {
 
-            analyzeButton.disabled = false;
+            analyzeButton.disabled =
+                false;
 
             analyzeButton.textContent =
-                "🔍 Analyze Charts";
+                "🔍 Analyze";
+
         }
 
     }
+
 }
 
 
@@ -281,11 +334,13 @@ function displayResult(data) {
         data.signal
     );
 
+
     setText(
         "entry",
         "Entry: ",
         data.entry
     );
+
 
     setText(
         "stoploss",
@@ -293,11 +348,13 @@ function displayResult(data) {
         data.stopLoss
     );
 
+
     setText(
         "target",
         "Target: ",
         data.target
     );
+
 
     setText(
         "reason",
@@ -305,11 +362,13 @@ function displayResult(data) {
         data.reason
     );
 
+
     setText(
         "confirmation",
         "Confirmation: ",
         data.confirmation
     );
+
 
     setText(
         "trend",
@@ -317,11 +376,13 @@ function displayResult(data) {
         data.trend
     );
 
+
     setText(
         "support",
         "Support: ",
         data.support
     );
+
 
     setText(
         "resistance",
@@ -334,12 +395,13 @@ function displayResult(data) {
     // SIGNAL STYLE
     // --------------------------------------
 
-    const signal =
+    const signalElement =
         document.getElementById("signal");
 
-    if (signal) {
 
-        signal.classList.remove(
+    if (signalElement) {
+
+        signalElement.classList.remove(
             "buy",
             "sell",
             "no-trade"
@@ -354,19 +416,23 @@ function displayResult(data) {
 
         if (value === "BUY") {
 
-            signal.classList.add(
+            signalElement.classList.add(
                 "buy"
             );
 
-        } else if (value === "SELL") {
+        }
 
-            signal.classList.add(
+        else if (value === "SELL") {
+
+            signalElement.classList.add(
                 "sell"
             );
 
-        } else {
+        }
 
-            signal.classList.add(
+        else {
+
+            signalElement.classList.add(
                 "no-trade"
             );
 
@@ -392,9 +458,11 @@ function setText(
             elementId
         );
 
+
     if (!element) {
         return;
     }
+
 
     element.textContent =
         label +
@@ -405,6 +473,7 @@ function setText(
                 ? value
                 : "-"
         );
+
 }
 
 
@@ -413,6 +482,10 @@ function setText(
 // ==========================================
 
 function clearResult() {
+
+    // --------------------------------------
+    // CLEAR IMAGES
+    // --------------------------------------
 
     image1H = null;
     image30M = null;
@@ -424,9 +497,11 @@ function clearResult() {
     // --------------------------------------
 
     const inputs = [
+
         "chart1H",
         "chart30M",
         "chart5M"
+
     ];
 
 
@@ -436,7 +511,9 @@ function clearResult() {
             document.getElementById(id);
 
         if (input) {
+
             input.value = "";
+
         }
 
     });
@@ -447,9 +524,11 @@ function clearResult() {
     // --------------------------------------
 
     const previews = [
+
         "preview1H",
         "preview30M",
         "preview5M"
+
     ];
 
 
@@ -458,19 +537,21 @@ function clearResult() {
         const preview =
             document.getElementById(id);
 
+
         if (preview) {
 
             preview.src = "";
 
             preview.style.display =
                 "none";
+
         }
 
     });
 
 
     // --------------------------------------
-    // CLEAR RESULTS
+    // CLEAR RESULT FIELDS
     // --------------------------------------
 
     const resultIds = [
@@ -493,23 +574,32 @@ function clearResult() {
         const element =
             document.getElementById(id);
 
+
         if (element) {
 
-            element.textContent =
-                "";
+            element.textContent = "";
+
 
             element.classList.remove(
                 "buy",
                 "sell",
                 "no-trade"
             );
+
         }
 
     });
 
 
+    // --------------------------------------
+    // CLEAR STATUS
+    // --------------------------------------
+
     const result =
-        document.getElementById("result");
+        document.getElementById(
+            "result"
+        );
+
 
     if (result) {
 
@@ -524,9 +614,27 @@ function clearResult() {
 
 
 // ==========================================
-// INITIAL MESSAGE
+// STARTUP TEST
 // ==========================================
 
 console.log(
-    "AI Trading Assistant frontend loaded."
+    "================================="
+);
+
+console.log(
+    "AI Trading Assistant frontend loaded"
+);
+
+console.log(
+    "Backend:",
+    API_BASE_URL
+);
+
+console.log(
+    "Analyze endpoint:",
+    API_BASE_URL + "/analyze"
+);
+
+console.log(
+    "================================="
 );
