@@ -1,3 +1,6 @@
+# Complete `public/server.js`
+
+```js
 require("dotenv").config();
 
 const express = require("express");
@@ -50,8 +53,7 @@ const ai = new GoogleGenAI({
 // FRONTEND
 // =====================================
 
-const publicFolder =
-    path.join(__dirname, "public");
+const publicFolder = path.join(__dirname, "public");
 
 if (fs.existsSync(publicFolder)) {
     app.use(express.static(publicFolder));
@@ -62,12 +64,10 @@ if (fs.existsSync(publicFolder)) {
 // =====================================
 
 app.get("/", (req, res) => {
-
-    const indexPath =
-        path.join(
-            publicFolder,
-            "index.html"
-        );
+    const indexPath = path.join(
+        publicFolder,
+        "index.html"
+    );
 
     if (fs.existsSync(indexPath)) {
         return res.sendFile(indexPath);
@@ -81,15 +81,13 @@ app.get("/", (req, res) => {
 // =====================================
 
 app.get("/health", (req, res) => {
-
     res.json({
         success: true,
         message: "AI Trading Server is running",
         model: MODEL,
-        strategy: "Future Trade Setup",
+        strategy: "Future Conditional Setup",
         time: new Date().toISOString()
     });
-
 });
 
 // =====================================
@@ -97,26 +95,18 @@ app.get("/health", (req, res) => {
 // =====================================
 
 app.get("/test-ai", async (req, res) => {
-
     try {
-
         const response =
             await ai.models.generateContent({
-
                 model: MODEL,
-
                 contents:
                     "Reply with only one word: SUCCESS"
-
             });
 
         res.json({
-
             success: true,
-
             reply:
                 response.text || "SUCCESS"
-
         });
 
     } catch (error) {
@@ -127,16 +117,10 @@ app.get("/test-ai", async (req, res) => {
         );
 
         res.status(500).json({
-
             success: false,
-
-            error:
-                error.message
-
+            error: error.message
         });
-
     }
-
 });
 
 // =====================================
@@ -145,9 +129,7 @@ app.get("/test-ai", async (req, res) => {
 
 function cleanBase64(image) {
 
-    if (
-        typeof image !== "string"
-    ) {
+    if (typeof image !== "string") {
         return image;
     }
 
@@ -155,7 +137,6 @@ function cleanBase64(image) {
         /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
         ""
     );
-
 }
 
 // =====================================
@@ -184,7 +165,6 @@ function getValue(text, label) {
     return match
         ? match[1].trim()
         : "-";
-
 }
 
 // =====================================
@@ -200,20 +180,13 @@ app.post("/analyze", async (req, res) => {
             image30M
         } = req.body;
 
-        if (
-            !image1H ||
-            !image30M
-        ) {
+        if (!image1H || !image30M) {
 
             return res.status(400).json({
-
                 success: false,
-
                 error:
                     "Please upload both 1H and 30M charts."
-
             });
-
         }
 
         const chart1H =
@@ -223,23 +196,18 @@ app.post("/analyze", async (req, res) => {
             cleanBase64(image30M);
 
         const prompt = `
-
 You are a disciplined BTC/USD technical analysis assistant.
 
 The user supplied two TradingView BTC/USD charts.
 
 1H = higher timeframe direction.
-30M = primary setup timeframe.
+30M = setup timeframe.
 
-The goal is a FUTURE TRADE SETUP.
+The goal is a FUTURE CONDITIONAL TRADE SETUP.
 
-Do not simply describe the current market.
-
-Analyze whether a probable future BUY or SELL setup is developing.
-
-Do NOT guarantee the future.
-Do NOT claim certainty.
-Do NOT invent prices.
+Do not claim to know the future.
+Do not guarantee any result.
+Do not invent prices.
 
 Analyze:
 
@@ -275,11 +243,13 @@ Rules:
 5. Do not invent support or resistance.
 6. Do not invent volume.
 7. Risk Reward must be at least 1:2.
-8. If Risk Reward is below 1:2, return NO TRADE.
-9. The entry should represent a possible FUTURE trigger, not simply the current price.
-10. If there is no clear future trigger, return NO TRADE.
+8. The entry must be a FUTURE TRIGGER.
+9. Do not use the current price as the future entry unless the chart clearly supports it.
+10. A BUY means price must later reach/break the entry trigger.
+11. A SELL means price must later reach/break the entry trigger.
+12. If there is no clear future trigger, return NO TRADE.
 
-Return ONLY these lines:
+Return ONLY:
 
 Signal: BUY or SELL or NO TRADE
 Entry: price or -
@@ -299,7 +269,6 @@ Confirmation
 Long explanations
 Markdown
 Tables
-
 `;
 
         const response =
@@ -316,15 +285,11 @@ Tables
 
                     {
                         inlineData: {
-
                             mimeType:
                                 "image/png",
-
                             data:
                                 chart1H
-
                         }
-
                     },
 
                     {
@@ -334,25 +299,19 @@ Tables
 
                     {
                         inlineData: {
-
                             mimeType:
                                 "image/png",
-
                             data:
                                 chart30M
-
                         }
-
                     },
 
                     {
                         text:
                             prompt
-
                     }
 
                 ]
-
             });
 
         const text =
@@ -415,7 +374,6 @@ Tables
 
             raw:
                 text
-
         });
 
     } catch (error) {
@@ -426,16 +384,10 @@ Tables
         );
 
         res.status(500).json({
-
             success: false,
-
-            error:
-                error.message
-
+            error: error.message
         });
-
     }
-
 });
 
 // =====================================
@@ -452,7 +404,6 @@ const INTERVALS = {
 
     "4h":
         4 * 60 * 60
-
 };
 
 // =====================================
@@ -477,9 +428,7 @@ function normalizeCandle(candle) {
 
         close:
             Number(candle.close)
-
     };
-
 }
 
 // =====================================
@@ -499,7 +448,6 @@ async function getRecentCandles(
         throw new Error(
             `Unsupported resolution: ${resolution}`
         );
-
     }
 
     const now =
@@ -537,22 +485,16 @@ async function getRecentCandles(
         throw new Error(
             `${resolution} API error ${response.status}: ${errorText}`
         );
-
     }
 
     const data =
         await response.json();
 
-    if (
-        !Array.isArray(
-            data.result
-        )
-    ) {
+    if (!Array.isArray(data.result)) {
 
         throw new Error(
             `${resolution}: candle data unavailable`
         );
-
     }
 
     const candles =
@@ -570,34 +512,26 @@ async function getRecentCandles(
                     a.time - b.time
             );
 
-    for (
-        const candle of candles
-    ) {
+    for (const candle of candles) {
 
         candle.intervalSeconds =
             interval;
-
     }
 
     return candles;
-
 }
 
 // =====================================
 // LAST CLOSED CANDLE
 // =====================================
 
-function getLastClosedCandle(
-    candles
-) {
+function getLastClosedCandle(candles) {
 
     if (
         !Array.isArray(candles) ||
         candles.length === 0
     ) {
-
         return null;
-
     }
 
     const now =
@@ -606,8 +540,7 @@ function getLastClosedCandle(
         );
 
     for (
-        let i =
-            candles.length - 1;
+        let i = candles.length - 1;
         i >= 0;
         i--
     ) {
@@ -617,23 +550,18 @@ function getLastClosedCandle(
 
         if (
             candle.time +
-            candle.intervalSeconds
-            <= now
+            candle.intervalSeconds <=
+            now
         ) {
 
             return {
-
                 candle,
                 index: i
-
             };
-
         }
-
     }
 
     return null;
-
 }
 
 // =====================================
@@ -649,9 +577,7 @@ function calculateEMA(
         !Array.isArray(candles) ||
         candles.length < period
     ) {
-
         return [];
-
     }
 
     const ema =
@@ -669,7 +595,6 @@ function calculateEMA(
 
         sum +=
             candles[i].close;
-
     }
 
     let previous =
@@ -679,8 +604,7 @@ function calculateEMA(
         previous;
 
     const multiplier =
-        2 /
-        (period + 1);
+        2 / (period + 1);
 
     for (
         let i = period;
@@ -704,11 +628,9 @@ function calculateEMA(
 
         previous =
             value;
-
     }
 
     return ema;
-
 }
 
 // =====================================
@@ -725,17 +647,11 @@ function detectCrossover(
         !Array.isArray(fastEMA) ||
         !Array.isArray(slowEMA)
     ) {
-
         return "NONE";
-
     }
 
-    if (
-        index < 1
-    ) {
-
+    if (index < 1) {
         return "NONE";
-
     }
 
     const previousFast =
@@ -756,31 +672,24 @@ function detectCrossover(
         currentFast === null ||
         currentSlow === null
     ) {
-
         return "NONE";
-
     }
 
     if (
         previousFast <= previousSlow &&
         currentFast > currentSlow
     ) {
-
         return "BULLISH";
-
     }
 
     if (
         previousFast >= previousSlow &&
         currentFast < currentSlow
     ) {
-
         return "BEARISH";
-
     }
 
     return "NONE";
-
 }
 
 // =====================================
@@ -796,9 +705,7 @@ function calculateMomentum(
     if (
         index < lookback
     ) {
-
         return "NEUTRAL";
-
     }
 
     const current =
@@ -809,33 +716,22 @@ function calculateMomentum(
             index - lookback
         ].close;
 
-    if (
-        current > previous
-    ) {
-
+    if (current > previous) {
         return "BULLISH";
-
     }
 
-    if (
-        current < previous
-    ) {
-
+    if (current < previous) {
         return "BEARISH";
-
     }
 
     return "NEUTRAL";
-
 }
 
 // =====================================
 // CANDLE STRUCTURE
 // =====================================
 
-function getCandleStructure(
-    candle
-) {
+function getCandleStructure(candle) {
 
     const body =
         Math.abs(
@@ -847,12 +743,8 @@ function getCandleStructure(
         candle.high -
         candle.low;
 
-    if (
-        range <= 0
-    ) {
-
+    if (range <= 0) {
         return "NEUTRAL";
-
     }
 
     const bodyRatio =
@@ -863,9 +755,7 @@ function getCandleStructure(
             candle.open &&
         bodyRatio >= 0.5
     ) {
-
         return "BULLISH";
-
     }
 
     if (
@@ -873,13 +763,10 @@ function getCandleStructure(
             candle.open &&
         bodyRatio >= 0.5
     ) {
-
         return "BEARISH";
-
     }
 
     return "NEUTRAL";
-
 }
 
 // =====================================
@@ -895,7 +782,9 @@ function getRecentHigh(
     const start =
         Math.max(
             0,
-            endIndex - lookback + 1
+            endIndex -
+                lookback +
+                1
         );
 
     let highest =
@@ -912,13 +801,11 @@ function getRecentHigh(
                 highest,
                 candles[i].high
             );
-
     }
 
     return Number.isFinite(highest)
         ? highest
         : null;
-
 }
 
 // =====================================
@@ -934,7 +821,9 @@ function getRecentLow(
     const start =
         Math.max(
             0,
-            endIndex - lookback + 1
+            endIndex -
+                lookback +
+                1
         );
 
     let lowest =
@@ -951,13 +840,80 @@ function getRecentLow(
                 lowest,
                 candles[i].low
             );
-
     }
 
     return Number.isFinite(lowest)
         ? lowest
         : null;
+}
 
+// =====================================
+// FUTURE PREDICTION
+// =====================================
+
+function calculateFuturePrediction(
+    trend4h,
+    trend1h,
+    ema30mTrend,
+    momentum30m,
+    crossover
+) {
+
+    // =================================
+    // BUY BIAS
+    // =================================
+
+    if (
+        trend4h === "BULLISH" &&
+        trend1h === "BULLISH" &&
+        ema30mTrend === "BULLISH" &&
+        momentum30m === "BULLISH"
+    ) {
+
+        return {
+
+            signal: "BUY",
+
+            reason:
+                crossover === "BULLISH"
+                    ? "Bullish alignment confirmed across 4H, 1H and 30M with bullish momentum and EMA crossover."
+                    : "Bullish alignment exists across 4H, 1H and 30M with bullish momentum."
+        };
+    }
+
+    // =================================
+    // SELL BIAS
+    // =================================
+
+    if (
+        trend4h === "BEARISH" &&
+        trend1h === "BEARISH" &&
+        ema30mTrend === "BEARISH" &&
+        momentum30m === "BEARISH"
+    ) {
+
+        return {
+
+            signal: "SELL",
+
+            reason:
+                crossover === "BEARISH"
+                    ? "Bearish alignment confirmed across 4H, 1H and 30M with bearish momentum and bearish EMA crossover."
+                    : "Bearish alignment exists across 4H, 1H and 30M with bearish momentum."
+        };
+    }
+
+    // =================================
+    // NO TRADE
+    // =================================
+
+    return {
+
+        signal: "NO TRADE",
+
+        reason:
+            "The required 4H, 1H and 30M conditions are not aligned strongly enough for a future setup."
+    };
 }
 
 // =====================================
@@ -965,41 +921,31 @@ function getRecentLow(
 // =====================================
 
 function calculateFutureSetup(
-    prediction,
-    currentPrice,
+    signal,
     recentHigh,
     recentLow
 ) {
 
     if (
-        prediction !== "BUY" &&
-        prediction !== "SELL"
+        signal !== "BUY" &&
+        signal !== "SELL"
     ) {
-
         return null;
-
     }
 
     if (
-        !Number.isFinite(currentPrice) ||
         !Number.isFinite(recentHigh) ||
         !Number.isFinite(recentLow)
     ) {
-
         return null;
-
     }
 
     const range =
         recentHigh -
         recentLow;
 
-    if (
-        range <= 0
-    ) {
-
+    if (range <= 0) {
         return null;
-
     }
 
     let entry;
@@ -1007,14 +953,12 @@ function calculateFutureSetup(
     let target;
 
     // =================================
-    // FUTURE BUY SETUP
+    // FUTURE BUY
     // =================================
 
-    if (
-        prediction === "BUY"
-    ) {
+    if (signal === "BUY") {
 
-        // Future breakout trigger.
+        // Price must break above this level.
         entry =
             recentHigh;
 
@@ -1026,30 +970,22 @@ function calculateFutureSetup(
             entry -
             stopLoss;
 
-        if (
-            risk <= 0
-        ) {
-
+        if (risk <= 0) {
             return null;
-
         }
 
-        // Minimum 1:2 target.
         target =
             entry +
             risk * 2;
-
     }
 
     // =================================
-    // FUTURE SELL SETUP
+    // FUTURE SELL
     // =================================
 
-    if (
-        prediction === "SELL"
-    ) {
+    if (signal === "SELL") {
 
-        // Future breakdown trigger.
+        // Price must break below this level.
         entry =
             recentLow;
 
@@ -1061,19 +997,13 @@ function calculateFutureSetup(
             stopLoss -
             entry;
 
-        if (
-            risk <= 0
-        ) {
-
+        if (risk <= 0) {
             return null;
-
         }
 
-        // Minimum 1:2 target.
         target =
             entry -
             risk * 2;
-
     }
 
     const risk =
@@ -1092,20 +1022,14 @@ function calculateFutureSetup(
         risk <= 0 ||
         reward <= 0
     ) {
-
         return null;
-
     }
 
     const rr =
         reward / risk;
 
-    if (
-        rr < 2
-    ) {
-
+    if (rr < 2) {
         return null;
-
     }
 
     return {
@@ -1127,85 +1051,7 @@ function calculateFutureSetup(
 
         riskReward:
             `1:${rr.toFixed(2)}`
-
     };
-
-}
-
-// =====================================
-// FUTURE PREDICTION
-// =====================================
-
-function calculateFuturePrediction(
-    trend4h,
-    trend1h,
-    ema30mTrend,
-    momentum30m,
-    candle30m,
-    crossover
-) {
-
-    // ---------------------------------
-    // BULLISH
-    // ---------------------------------
-
-    if (
-        trend4h === "BULLISH" &&
-        trend1h === "BULLISH" &&
-        ema30mTrend === "BULLISH" &&
-        momentum30m === "BULLISH"
-    ) {
-
-        return {
-
-            signal: "BUY",
-
-            reason:
-                crossover === "BULLISH"
-                    ? "4H and 1H are bullish, 30M EMA9 is above EMA26, momentum is bullish and a bullish crossover has occurred."
-                    : "4H and 1H are bullish, 30M EMA9 is above EMA26 and recent momentum is bullish."
-
-        };
-
-    }
-
-    // ---------------------------------
-    // BEARISH
-    // ---------------------------------
-
-    if (
-        trend4h === "BEARISH" &&
-        trend1h === "BEARISH" &&
-        ema30mTrend === "BEARISH" &&
-        momentum30m === "BEARISH"
-    ) {
-
-        return {
-
-            signal: "SELL",
-
-            reason:
-                crossover === "BEARISH"
-                    ? "4H and 1H are bearish, 30M EMA9 is below EMA26, momentum is bearish and a bearish crossover has occurred."
-                    : "4H and 1H are bearish, 30M EMA9 is below EMA26 and recent momentum is bearish."
-
-        };
-
-    }
-
-    // ---------------------------------
-    // NO TRADE
-    // ---------------------------------
-
-    return {
-
-        signal: "NO TRADE",
-
-        reason:
-            "The required higher-timeframe and 30M conditions are not aligned strongly enough for a future setup."
-
-    };
-
 }
 
 // =====================================
@@ -1219,7 +1065,7 @@ app.get(
         try {
 
             // =================================
-            // GET MARKET DATA
+            // MARKET DATA
             // =================================
 
             const candles30m =
@@ -1241,7 +1087,7 @@ app.get(
                 );
 
             // =================================
-            // CLOSED CANDLES
+            // LAST CLOSED CANDLES
             // =================================
 
             const closed30m =
@@ -1268,7 +1114,6 @@ app.get(
                 throw new Error(
                     "Not enough closed candles available."
                 );
-
             }
 
             const i30 =
@@ -1321,7 +1166,7 @@ app.get(
                 );
 
             // =================================
-            // TREND
+            // TRENDS
             // =================================
 
             const trend4h =
@@ -1347,16 +1192,13 @@ app.get(
                 ema30mTrend =
                     "BULLISH";
 
-            }
-
-            else if (
+            } else if (
                 ema30m9[i30] <
                 ema30m26[i30]
             ) {
 
                 ema30mTrend =
                     "BEARISH";
-
             }
 
             // =================================
@@ -1398,7 +1240,7 @@ app.get(
                 closed30m.candle.close;
 
             // =================================
-            // FUTURE BREAKOUT LEVELS
+            // FUTURE TRIGGER LEVELS
             // =================================
 
             const recentHigh =
@@ -1416,7 +1258,7 @@ app.get(
                 );
 
             // =================================
-            // FUTURE PREDICTION
+            // FUTURE BIAS
             // =================================
 
             const prediction =
@@ -1425,7 +1267,6 @@ app.get(
                     trend1h,
                     ema30mTrend,
                     momentum30m,
-                    closed30m.candle,
                     crossover
                 );
 
@@ -1433,28 +1274,22 @@ app.get(
                 prediction.signal;
 
             // =================================
-            // FUTURE TRADE SETUP
+            // FUTURE TRADE
             // =================================
 
             const trade =
                 calculateFutureSetup(
                     signal,
-                    currentPrice,
                     recentHigh,
                     recentLow
                 );
 
             // =================================
-            // FINAL VALIDATION
+            // VALIDATION
             // =================================
 
-            if (
-                !trade
-            ) {
-
-                signal =
-                    "NO TRADE";
-
+            if (!trade) {
+                signal = "NO TRADE";
             }
 
             // =================================
@@ -1465,21 +1300,40 @@ app.get(
                 "NONE";
 
             if (
-                crossover === "BULLISH"
+                crossover ===
+                "BULLISH"
             ) {
 
                 alert =
                     "🟢 Bullish EMA9/EMA26 crossover detected.";
-
             }
 
-            else if (
-                crossover === "BEARISH"
+            if (
+                crossover ===
+                "BEARISH"
             ) {
 
                 alert =
                     "🔴 Bearish EMA9/EMA26 crossover detected.";
+            }
 
+            // =================================
+            // FUTURE TRIGGER
+            // =================================
+
+            let futureTrigger =
+                "Wait for a valid setup.";
+
+            if (signal === "BUY" && trade) {
+
+                futureTrigger =
+                    `BUY only if 30M price breaks above ${trade.entry}.`;
+            }
+
+            if (signal === "SELL" && trade) {
+
+                futureTrigger =
+                    `SELL only if 30M price breaks below ${trade.entry}.`;
             }
 
             // =================================
@@ -1504,6 +1358,10 @@ app.get(
 
                 predictionReason:
                     prediction.reason,
+
+                // This is only the latest
+                // closed-candle reference price.
+                // It is NOT the future entry.
 
                 price:
                     Number(
@@ -1549,12 +1407,7 @@ app.get(
                         ? trade.riskReward
                         : null,
 
-                futureTrigger:
-                    signal === "BUY"
-                        ? "30M price breaks above the future entry trigger."
-                        : signal === "SELL"
-                            ? "30M price breaks below the future entry trigger."
-                            : "Wait for a valid setup.",
+                futureTrigger,
 
                 support:
                     recentLow,
@@ -1570,7 +1423,6 @@ app.get(
 
                 updatedAt:
                     new Date().toISOString()
-
             });
 
         } catch (error) {
@@ -1586,11 +1438,8 @@ app.get(
 
                 error:
                     error.message
-
             });
-
         }
-
     }
 );
 
@@ -1642,7 +1491,7 @@ app.listen(
         );
 
         console.log(
-            "STRATEGY = FUTURE TRADE SETUP"
+            "STRATEGY = FUTURE CONDITIONAL SETUP"
         );
 
         console.log(
@@ -1674,6 +1523,6 @@ app.listen(
         console.log(
             "================================="
         );
-
     }
 );
+```
