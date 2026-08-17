@@ -73,9 +73,7 @@ app.get("/", (req, res) => {
         return res.sendFile(indexPath);
     }
 
-    res.send(
-        "AI Trading Server Running"
-    );
+    res.send("AI Trading Server Running");
 });
 
 // =====================================
@@ -86,11 +84,10 @@ app.get("/health", (req, res) => {
 
     res.json({
         success: true,
-        message:
-            "AI Trading Server is running",
+        message: "AI Trading Server is running",
         model: MODEL,
-        time:
-            new Date().toISOString()
+        strategy: "Future Trade Setup",
+        time: new Date().toISOString()
     });
 
 });
@@ -231,20 +228,20 @@ You are a disciplined BTC/USD technical analysis assistant.
 
 The user supplied two TradingView BTC/USD charts.
 
-1H = higher timeframe direction
-30M = primary setup and entry timeframe
+1H = higher timeframe direction.
+30M = primary setup timeframe.
 
-Analyze ONLY the supplied charts.
+The goal is a FUTURE TRADE SETUP.
 
-Do NOT force a trade.
+Do not simply describe the current market.
 
-The final signal must be exactly:
+Analyze whether a probable future BUY or SELL setup is developing.
 
-BUY
-SELL
-NO TRADE
+Do NOT guarantee the future.
+Do NOT claim certainty.
+Do NOT invent prices.
 
-Use:
+Analyze:
 
 1H:
 - Overall trend
@@ -259,29 +256,30 @@ Use:
 30M:
 - EMA9
 - EMA26
-- Crossover
+- EMA crossover
 - Breakout
 - Breakdown
 - Retest
 - Rejection
 - Momentum
-- Entry area
-- Stop loss area
-- Target area
+- Possible future entry
+- Stop loss
+- Target
 
-Important rules:
+Rules:
 
-1. Do NOT automatically choose BUY.
-2. Do NOT automatically choose SELL.
+1. Do NOT force a trade.
+2. If 1H and 30M conflict, return NO TRADE.
 3. If the setup is unclear, return NO TRADE.
-4. If 1H and 30M conflict, return NO TRADE.
-5. Do not invent prices.
-6. Do not invent support or resistance.
-7. Do not invent volume.
-8. Risk Reward must be at least 1:2.
-9. If Risk Reward is below 1:2, return NO TRADE.
+4. Do not invent prices.
+5. Do not invent support or resistance.
+6. Do not invent volume.
+7. Risk Reward must be at least 1:2.
+8. If Risk Reward is below 1:2, return NO TRADE.
+9. The entry should represent a possible FUTURE trigger, not simply the current price.
+10. If there is no clear future trigger, return NO TRADE.
 
-Return ONLY:
+Return ONLY these lines:
 
 Signal: BUY or SELL or NO TRADE
 Entry: price or -
@@ -291,7 +289,6 @@ Risk Reward: 1:2 or better, or -
 Reason: short reason
 
 Do NOT return:
-
 5M
 Confidence
 EMA values
@@ -302,6 +299,7 @@ Confirmation
 Long explanations
 Markdown
 Tables
+
 `;
 
         const response =
@@ -350,6 +348,7 @@ Tables
                     {
                         text:
                             prompt
+
                     }
 
                 ]
@@ -364,7 +363,7 @@ Tables
             "================================="
         );
         console.log(
-            "AI IMAGE ANALYSIS"
+            "AI FUTURE SETUP IMAGE ANALYSIS"
         );
         console.log(
             "================================="
@@ -379,16 +378,28 @@ Tables
             success: true,
 
             signal:
-                getValue(text, "Signal"),
+                getValue(
+                    text,
+                    "Signal"
+                ),
 
             entry:
-                getValue(text, "Entry"),
+                getValue(
+                    text,
+                    "Entry"
+                ),
 
             stopLoss:
-                getValue(text, "Stop Loss"),
+                getValue(
+                    text,
+                    "Stop Loss"
+                ),
 
             target:
-                getValue(text, "Target"),
+                getValue(
+                    text,
+                    "Target"
+                ),
 
             riskReward:
                 getValue(
@@ -397,7 +408,10 @@ Tables
                 ),
 
             reason:
-                getValue(text, "Reason"),
+                getValue(
+                    text,
+                    "Reason"
+                ),
 
             raw:
                 text
@@ -425,10 +439,10 @@ Tables
 });
 
 // =====================================
-// LIVE MARKET INTERVALS
+// CANDLE INTERVALS
 // =====================================
 
-const LIVE_INTERVALS = {
+const INTERVALS = {
 
     "30m":
         30 * 60,
@@ -474,11 +488,11 @@ function normalizeCandle(candle) {
 
 async function getRecentCandles(
     resolution,
-    count = 100
+    count = 120
 ) {
 
     const interval =
-        LIVE_INTERVALS[resolution];
+        INTERVALS[resolution];
 
     if (!interval) {
 
@@ -544,6 +558,13 @@ async function getRecentCandles(
     const candles =
         data.result
             .map(normalizeCandle)
+            .filter(candle =>
+                Number.isFinite(candle.time) &&
+                Number.isFinite(candle.open) &&
+                Number.isFinite(candle.high) &&
+                Number.isFinite(candle.low) &&
+                Number.isFinite(candle.close)
+            )
             .sort(
                 (a, b) =>
                     a.time - b.time
@@ -571,7 +592,7 @@ function getLastClosedCandle(
 ) {
 
     if (
-        !candles ||
+        !Array.isArray(candles) ||
         candles.length === 0
     ) {
 
@@ -603,7 +624,6 @@ function getLastClosedCandle(
             return {
 
                 candle,
-
                 index: i
 
             };
@@ -659,7 +679,8 @@ function calculateEMA(
         previous;
 
     const multiplier =
-        2 / (period + 1);
+        2 /
+        (period + 1);
 
     for (
         let i = period;
@@ -691,7 +712,7 @@ function calculateEMA(
 }
 
 // =====================================
-// CROSSOVER DETECTOR
+// CROSSOVER
 // =====================================
 
 function detectCrossover(
@@ -709,7 +730,9 @@ function detectCrossover(
 
     }
 
-    if (index < 1) {
+    if (
+        index < 1
+    ) {
 
         return "NONE";
 
@@ -738,7 +761,6 @@ function detectCrossover(
 
     }
 
-    // BUY crossover
     if (
         previousFast <= previousSlow &&
         currentFast > currentSlow
@@ -748,7 +770,6 @@ function detectCrossover(
 
     }
 
-    // SELL crossover
     if (
         previousFast >= previousSlow &&
         currentFast < currentSlow
@@ -763,60 +784,247 @@ function detectCrossover(
 }
 
 // =====================================
-// TRADE LEVEL CALCULATION
+// MOMENTUM
 // =====================================
 
-function calculateTradeLevels(
-    signal,
-    entry,
-    support,
-    resistance
+function calculateMomentum(
+    candles,
+    index,
+    lookback = 3
 ) {
 
     if (
-        signal !== "BUY" &&
-        signal !== "SELL"
+        index < lookback
     ) {
 
-        return null;
+        return "NEUTRAL";
 
     }
 
-    entry =
-        Number(entry);
+    const current =
+        candles[index].close;
 
-    support =
-        Number(support);
-
-    resistance =
-        Number(resistance);
+    const previous =
+        candles[
+            index - lookback
+        ].close;
 
     if (
-        !Number.isFinite(entry) ||
-        !Number.isFinite(support) ||
-        !Number.isFinite(resistance)
+        current > previous
+    ) {
+
+        return "BULLISH";
+
+    }
+
+    if (
+        current < previous
+    ) {
+
+        return "BEARISH";
+
+    }
+
+    return "NEUTRAL";
+
+}
+
+// =====================================
+// CANDLE STRUCTURE
+// =====================================
+
+function getCandleStructure(
+    candle
+) {
+
+    const body =
+        Math.abs(
+            candle.close -
+            candle.open
+        );
+
+    const range =
+        candle.high -
+        candle.low;
+
+    if (
+        range <= 0
+    ) {
+
+        return "NEUTRAL";
+
+    }
+
+    const bodyRatio =
+        body / range;
+
+    if (
+        candle.close >
+            candle.open &&
+        bodyRatio >= 0.5
+    ) {
+
+        return "BULLISH";
+
+    }
+
+    if (
+        candle.close <
+            candle.open &&
+        bodyRatio >= 0.5
+    ) {
+
+        return "BEARISH";
+
+    }
+
+    return "NEUTRAL";
+
+}
+
+// =====================================
+// RECENT HIGH
+// =====================================
+
+function getRecentHigh(
+    candles,
+    endIndex,
+    lookback = 10
+) {
+
+    const start =
+        Math.max(
+            0,
+            endIndex - lookback + 1
+        );
+
+    let highest =
+        -Infinity;
+
+    for (
+        let i = start;
+        i <= endIndex;
+        i++
+    ) {
+
+        highest =
+            Math.max(
+                highest,
+                candles[i].high
+            );
+
+    }
+
+    return Number.isFinite(highest)
+        ? highest
+        : null;
+
+}
+
+// =====================================
+// RECENT LOW
+// =====================================
+
+function getRecentLow(
+    candles,
+    endIndex,
+    lookback = 10
+) {
+
+    const start =
+        Math.max(
+            0,
+            endIndex - lookback + 1
+        );
+
+    let lowest =
+        Infinity;
+
+    for (
+        let i = start;
+        i <= endIndex;
+        i++
+    ) {
+
+        lowest =
+            Math.min(
+                lowest,
+                candles[i].low
+            );
+
+    }
+
+    return Number.isFinite(lowest)
+        ? lowest
+        : null;
+
+}
+
+// =====================================
+// FUTURE TRADE SETUP
+// =====================================
+
+function calculateFutureSetup(
+    prediction,
+    currentPrice,
+    recentHigh,
+    recentLow
+) {
+
+    if (
+        prediction !== "BUY" &&
+        prediction !== "SELL"
     ) {
 
         return null;
 
     }
 
+    if (
+        !Number.isFinite(currentPrice) ||
+        !Number.isFinite(recentHigh) ||
+        !Number.isFinite(recentLow)
+    ) {
+
+        return null;
+
+    }
+
+    const range =
+        recentHigh -
+        recentLow;
+
+    if (
+        range <= 0
+    ) {
+
+        return null;
+
+    }
+
+    let entry;
     let stopLoss;
     let target;
 
     // =================================
-    // BUY
+    // FUTURE BUY SETUP
     // =================================
 
     if (
-        signal === "BUY"
+        prediction === "BUY"
     ) {
 
+        // Future breakout trigger.
+        entry =
+            recentHigh;
+
+        // Stop below recent range.
         stopLoss =
-            support;
+            recentLow;
 
         const risk =
-            entry - stopLoss;
+            entry -
+            stopLoss;
 
         if (
             risk <= 0
@@ -826,36 +1034,32 @@ function calculateTradeLevels(
 
         }
 
+        // Minimum 1:2 target.
         target =
             entry +
             risk * 2;
 
-        // There must be enough room
-        // before resistance.
-
-        if (
-            target > resistance
-        ) {
-
-            return null;
-
-        }
-
     }
 
     // =================================
-    // SELL
+    // FUTURE SELL SETUP
     // =================================
 
     if (
-        signal === "SELL"
+        prediction === "SELL"
     ) {
 
+        // Future breakdown trigger.
+        entry =
+            recentLow;
+
+        // Stop above recent range.
         stopLoss =
-            resistance;
+            recentHigh;
 
         const risk =
-            stopLoss - entry;
+            stopLoss -
+            entry;
 
         if (
             risk <= 0
@@ -865,31 +1069,23 @@ function calculateTradeLevels(
 
         }
 
+        // Minimum 1:2 target.
         target =
             entry -
             risk * 2;
-
-        // There must be enough room
-        // before support.
-
-        if (
-            target < support
-        ) {
-
-            return null;
-
-        }
 
     }
 
     const risk =
         Math.abs(
-            entry - stopLoss
+            entry -
+            stopLoss
         );
 
     const reward =
         Math.abs(
-            target - entry
+            target -
+            entry
         );
 
     if (
@@ -937,7 +1133,83 @@ function calculateTradeLevels(
 }
 
 // =====================================
-// LIVE ANALYSIS
+// FUTURE PREDICTION
+// =====================================
+
+function calculateFuturePrediction(
+    trend4h,
+    trend1h,
+    ema30mTrend,
+    momentum30m,
+    candle30m,
+    crossover
+) {
+
+    // ---------------------------------
+    // BULLISH
+    // ---------------------------------
+
+    if (
+        trend4h === "BULLISH" &&
+        trend1h === "BULLISH" &&
+        ema30mTrend === "BULLISH" &&
+        momentum30m === "BULLISH"
+    ) {
+
+        return {
+
+            signal: "BUY",
+
+            reason:
+                crossover === "BULLISH"
+                    ? "4H and 1H are bullish, 30M EMA9 is above EMA26, momentum is bullish and a bullish crossover has occurred."
+                    : "4H and 1H are bullish, 30M EMA9 is above EMA26 and recent momentum is bullish."
+
+        };
+
+    }
+
+    // ---------------------------------
+    // BEARISH
+    // ---------------------------------
+
+    if (
+        trend4h === "BEARISH" &&
+        trend1h === "BEARISH" &&
+        ema30mTrend === "BEARISH" &&
+        momentum30m === "BEARISH"
+    ) {
+
+        return {
+
+            signal: "SELL",
+
+            reason:
+                crossover === "BEARISH"
+                    ? "4H and 1H are bearish, 30M EMA9 is below EMA26, momentum is bearish and a bearish crossover has occurred."
+                    : "4H and 1H are bearish, 30M EMA9 is below EMA26 and recent momentum is bearish."
+
+        };
+
+    }
+
+    // ---------------------------------
+    // NO TRADE
+    // ---------------------------------
+
+    return {
+
+        signal: "NO TRADE",
+
+        reason:
+            "The required higher-timeframe and 30M conditions are not aligned strongly enough for a future setup."
+
+    };
+
+}
+
+// =====================================
+// FUTURE ANALYSIS
 // =====================================
 
 app.get(
@@ -946,31 +1218,71 @@ app.get(
 
         try {
 
-            // ---------------------------------
-            // GET 30M / 1H / 4H
-            // ---------------------------------
+            // =================================
+            // GET MARKET DATA
+            // =================================
 
             const candles30m =
                 await getRecentCandles(
                     "30m",
-                    100
+                    120
                 );
 
             const candles1h =
                 await getRecentCandles(
                     "1h",
-                    100
+                    120
                 );
 
             const candles4h =
                 await getRecentCandles(
                     "4h",
-                    100
+                    120
                 );
 
-            // ---------------------------------
+            // =================================
+            // CLOSED CANDLES
+            // =================================
+
+            const closed30m =
+                getLastClosedCandle(
+                    candles30m
+                );
+
+            const closed1h =
+                getLastClosedCandle(
+                    candles1h
+                );
+
+            const closed4h =
+                getLastClosedCandle(
+                    candles4h
+                );
+
+            if (
+                !closed30m ||
+                !closed1h ||
+                !closed4h
+            ) {
+
+                throw new Error(
+                    "Not enough closed candles available."
+                );
+
+            }
+
+            const i30 =
+                closed30m.index;
+
+            const i1 =
+                closed1h.index;
+
+            const i4 =
+                closed4h.index;
+
+            // =================================
             // EMA
-            // ---------------------------------
+            // =================================
 
             const ema30m9 =
                 calculateEMA(
@@ -1008,49 +1320,9 @@ app.get(
                     26
                 );
 
-            // ---------------------------------
-            // CLOSED CANDLES
-            // ---------------------------------
-
-            const closed30m =
-                getLastClosedCandle(
-                    candles30m
-                );
-
-            const closed1h =
-                getLastClosedCandle(
-                    candles1h
-                );
-
-            const closed4h =
-                getLastClosedCandle(
-                    candles4h
-                );
-
-            if (
-                !closed30m ||
-                !closed1h ||
-                !closed4h
-            ) {
-
-                throw new Error(
-                    "Not enough closed candles"
-                );
-
-            }
-
-            const i30 =
-                closed30m.index;
-
-            const i1 =
-                closed1h.index;
-
-            const i4 =
-                closed4h.index;
-
-            // ---------------------------------
-            // 4H TREND
-            // ---------------------------------
+            // =================================
+            // TREND
+            // =================================
 
             const trend4h =
                 ema4h9[i4] >
@@ -1058,19 +1330,11 @@ app.get(
                     ? "BULLISH"
                     : "BEARISH";
 
-            // ---------------------------------
-            // 1H TREND
-            // ---------------------------------
-
             const trend1h =
                 ema1h9[i1] >
                 ema1h26[i1]
                     ? "BULLISH"
                     : "BEARISH";
-
-            // ---------------------------------
-            // 30M TREND
-            // ---------------------------------
 
             let ema30mTrend =
                 "SIDEWAYS";
@@ -1095,9 +1359,9 @@ app.get(
 
             }
 
-            // ---------------------------------
-            // 30M CROSSOVER
-            // ---------------------------------
+            // =================================
+            // CROSSOVER
+            // =================================
 
             const crossover =
                 detectCrossover(
@@ -1106,118 +1370,121 @@ app.get(
                     i30
                 );
 
-            // ---------------------------------
-            // CROSSOVER ALERT
-            // ---------------------------------
+            // =================================
+            // MOMENTUM
+            // =================================
 
-            let alert =
-                "NONE";
+            const momentum30m =
+                calculateMomentum(
+                    candles30m,
+                    i30,
+                    3
+                );
 
-            if (
-                crossover ===
-                "BULLISH"
-            ) {
+            // =================================
+            // CANDLE STRUCTURE
+            // =================================
 
-                alert =
-                    "🟢 BUY CROSSOVER — EMA9 crossed ABOVE EMA26 on 30M";
+            const candleStructure =
+                getCandleStructure(
+                    closed30m.candle
+                );
 
-            }
+            // =================================
+            // CURRENT REFERENCE PRICE
+            // =================================
 
-            else if (
-                crossover ===
-                "BEARISH"
-            ) {
-
-                alert =
-                    "🔴 SELL CROSSOVER — EMA9 crossed BELOW EMA26 on 30M";
-
-            }
-
-            // ---------------------------------
-            // INITIAL SIGNAL
-            // ---------------------------------
-
-            let signal =
-                "NO TRADE";
-
-            if (
-                trend4h === "BULLISH" &&
-                trend1h === "BULLISH" &&
-                ema30mTrend === "BULLISH"
-            ) {
-
-                signal =
-                    "BUY";
-
-            }
-
-            else if (
-                trend4h === "BEARISH" &&
-                trend1h === "BEARISH" &&
-                ema30mTrend === "BEARISH"
-            ) {
-
-                signal =
-                    "SELL";
-
-            }
-
-            // ---------------------------------
-            // ENTRY PRICE
-            // ---------------------------------
-
-            const entryPrice =
+            const currentPrice =
                 closed30m.candle.close;
 
-            // ---------------------------------
-            // SUPPORT / RESISTANCE
-            // ---------------------------------
+            // =================================
+            // FUTURE BREAKOUT LEVELS
+            // =================================
 
-            const recent30 =
-                candles30m.slice(-20);
-
-            const support =
-                Math.min(
-                    ...recent30.map(
-                        candle =>
-                            candle.low
-                    )
+            const recentHigh =
+                getRecentHigh(
+                    candles30m,
+                    i30,
+                    10
                 );
 
-            const resistance =
-                Math.max(
-                    ...recent30.map(
-                        candle =>
-                            candle.high
-                    )
+            const recentLow =
+                getRecentLow(
+                    candles30m,
+                    i30,
+                    10
                 );
 
-            // ---------------------------------
-            // TRADE LEVELS
-            // ---------------------------------
+            // =================================
+            // FUTURE PREDICTION
+            // =================================
+
+            const prediction =
+                calculateFuturePrediction(
+                    trend4h,
+                    trend1h,
+                    ema30mTrend,
+                    momentum30m,
+                    closed30m.candle,
+                    crossover
+                );
+
+            let signal =
+                prediction.signal;
+
+            // =================================
+            // FUTURE TRADE SETUP
+            // =================================
 
             const trade =
-                calculateTradeLevels(
+                calculateFutureSetup(
                     signal,
-                    entryPrice,
-                    support,
-                    resistance
+                    currentPrice,
+                    recentHigh,
+                    recentLow
                 );
 
-            // ---------------------------------
-            // FINAL DECISION
-            // ---------------------------------
+            // =================================
+            // FINAL VALIDATION
+            // =================================
 
-            if (!trade) {
+            if (
+                !trade
+            ) {
 
                 signal =
                     "NO TRADE";
 
             }
 
-            // ---------------------------------
+            // =================================
+            // ALERT
+            // =================================
+
+            let alert =
+                "NONE";
+
+            if (
+                crossover === "BULLISH"
+            ) {
+
+                alert =
+                    "🟢 Bullish EMA9/EMA26 crossover detected.";
+
+            }
+
+            else if (
+                crossover === "BEARISH"
+            ) {
+
+                alert =
+                    "🔴 Bearish EMA9/EMA26 crossover detected.";
+
+            }
+
+            // =================================
             // RESPONSE
-            // ---------------------------------
+            // =================================
 
             res.json({
 
@@ -1226,13 +1493,21 @@ app.get(
                 symbol:
                     SYMBOL,
 
-                signal:
+                mode:
+                    "FUTURE_SETUP",
 
+                signal:
                     signal,
+
+                prediction:
+                    signal,
+
+                predictionReason:
+                    prediction.reason,
 
                 price:
                     Number(
-                        entryPrice.toFixed(2)
+                        currentPrice.toFixed(2)
                     ),
 
                 trend4h,
@@ -1241,9 +1516,18 @@ app.get(
 
                 ema30mTrend,
 
+                momentum30m,
+
+                candleStructure,
+
                 crossover,
 
                 alert,
+
+                futureEntry:
+                    trade
+                        ? trade.entry
+                        : null,
 
                 entry:
                     trade
@@ -1265,20 +1549,24 @@ app.get(
                         ? trade.riskReward
                         : null,
 
+                futureTrigger:
+                    signal === "BUY"
+                        ? "30M price breaks above the future entry trigger."
+                        : signal === "SELL"
+                            ? "30M price breaks below the future entry trigger."
+                            : "Wait for a valid setup.",
+
+                support:
+                    recentLow,
+
+                resistance:
+                    recentHigh,
+
                 candleTime:
                     new Date(
                         closed30m.candle.time *
                         1000
                     ).toISOString(),
-
-                crossoverCandleTime:
-
-                    crossover !== "NONE"
-                        ? new Date(
-                            closed30m.candle.time *
-                            1000
-                        ).toISOString()
-                        : null,
 
                 updatedAt:
                     new Date().toISOString()
@@ -1288,7 +1576,7 @@ app.get(
         } catch (error) {
 
             console.error(
-                "LIVE ANALYSIS ERROR:",
+                "FUTURE ANALYSIS ERROR:",
                 error
             );
 
@@ -1346,7 +1634,7 @@ app.listen(
         );
 
         console.log(
-            "LIVE AI    = /live-analysis"
+            "FUTURE AI  = /live-analysis"
         );
 
         console.log(
@@ -1354,11 +1642,15 @@ app.listen(
         );
 
         console.log(
-            "STRATEGY = 4H + 1H + 30M"
+            "STRATEGY = FUTURE TRADE SETUP"
         );
 
         console.log(
-            "ENTRY = 30M CLOSED CANDLE"
+            "TIMEFRAMES = 4H + 1H + 30M"
+        );
+
+        console.log(
+            "EMA = 9 / 26"
         );
 
         console.log(
