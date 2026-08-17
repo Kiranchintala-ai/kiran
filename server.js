@@ -50,7 +50,8 @@ const ai = new GoogleGenAI({
 // FRONTEND
 // =====================================
 
-const publicFolder = path.join(__dirname, "public");
+const publicFolder =
+    path.join(__dirname, "public");
 
 if (fs.existsSync(publicFolder)) {
     app.use(express.static(publicFolder));
@@ -61,16 +62,20 @@ if (fs.existsSync(publicFolder)) {
 // =====================================
 
 app.get("/", (req, res) => {
-    const indexPath = path.join(
-        publicFolder,
-        "index.html"
-    );
+
+    const indexPath =
+        path.join(
+            publicFolder,
+            "index.html"
+        );
 
     if (fs.existsSync(indexPath)) {
         return res.sendFile(indexPath);
     }
 
-    res.send("AI Trading Server Running");
+    res.send(
+        "AI Trading Server Running"
+    );
 });
 
 // =====================================
@@ -78,12 +83,16 @@ app.get("/", (req, res) => {
 // =====================================
 
 app.get("/health", (req, res) => {
+
     res.json({
         success: true,
-        message: "AI Trading Server is running",
+        message:
+            "AI Trading Server is running",
         model: MODEL,
-        time: new Date().toISOString()
+        time:
+            new Date().toISOString()
     });
+
 });
 
 // =====================================
@@ -91,18 +100,26 @@ app.get("/health", (req, res) => {
 // =====================================
 
 app.get("/test-ai", async (req, res) => {
+
     try {
+
         const response =
             await ai.models.generateContent({
+
                 model: MODEL,
+
                 contents:
                     "Reply with only one word: SUCCESS"
+
             });
 
         res.json({
+
             success: true,
+
             reply:
                 response.text || "SUCCESS"
+
         });
 
     } catch (error) {
@@ -113,10 +130,16 @@ app.get("/test-ai", async (req, res) => {
         );
 
         res.status(500).json({
+
             success: false,
-            error: error.message
+
+            error:
+                error.message
+
         });
+
     }
+
 });
 
 // =====================================
@@ -125,7 +148,9 @@ app.get("/test-ai", async (req, res) => {
 
 function cleanBase64(image) {
 
-    if (typeof image !== "string") {
+    if (
+        typeof image !== "string"
+    ) {
         return image;
     }
 
@@ -133,6 +158,36 @@ function cleanBase64(image) {
         /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
         ""
     );
+
+}
+
+// =====================================
+// VALUE EXTRACTOR
+// =====================================
+
+function getValue(text, label) {
+
+    const escapedLabel =
+        label.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&"
+        );
+
+    const regex =
+        new RegExp(
+            "^\\s*" +
+            escapedLabel +
+            "\\s*:\\s*(.+)$",
+            "im"
+        );
+
+    const match =
+        text.match(regex);
+
+    return match
+        ? match[1].trim()
+        : "-";
+
 }
 
 // =====================================
@@ -154,10 +209,14 @@ app.post("/analyze", async (req, res) => {
         ) {
 
             return res.status(400).json({
+
                 success: false,
+
                 error:
                     "Please upload both 1H and 30M charts."
+
             });
+
         }
 
         const chart1H =
@@ -170,10 +229,10 @@ app.post("/analyze", async (req, res) => {
 
 You are a disciplined BTC/USD technical analysis assistant.
 
-The user supplied two TradingView charts.
+The user supplied two TradingView BTC/USD charts.
 
-1H = higher timeframe trend
-30M = main setup and entry timeframe
+1H = higher timeframe direction
+30M = primary setup and entry timeframe
 
 Analyze ONLY the supplied charts.
 
@@ -185,7 +244,7 @@ BUY
 SELL
 NO TRADE
 
-Analyze:
+Use:
 
 1H:
 - Overall trend
@@ -210,27 +269,19 @@ Analyze:
 - Stop loss area
 - Target area
 
-Important:
+Important rules:
 
-Do NOT automatically choose BUY.
+1. Do NOT automatically choose BUY.
+2. Do NOT automatically choose SELL.
+3. If the setup is unclear, return NO TRADE.
+4. If 1H and 30M conflict, return NO TRADE.
+5. Do not invent prices.
+6. Do not invent support or resistance.
+7. Do not invent volume.
+8. Risk Reward must be at least 1:2.
+9. If Risk Reward is below 1:2, return NO TRADE.
 
-Do NOT automatically choose SELL.
-
-If the setup is unclear, return NO TRADE.
-
-If 1H and 30M conflict, return NO TRADE.
-
-Do not invent prices.
-
-Do not invent support or resistance.
-
-Do not invent volume.
-
-Risk:Reward must be at least 1:2.
-
-If Risk:Reward is below 1:2, return NO TRADE.
-
-Return ONLY these lines:
+Return ONLY:
 
 Signal: BUY or SELL or NO TRADE
 Entry: price or -
@@ -251,7 +302,6 @@ Confirmation
 Long explanations
 Markdown
 Tables
-
 `;
 
         const response =
@@ -268,9 +318,15 @@ Tables
 
                     {
                         inlineData: {
-                            mimeType: "image/png",
-                            data: chart1H
+
+                            mimeType:
+                                "image/png",
+
+                            data:
+                                chart1H
+
                         }
+
                     },
 
                     {
@@ -280,16 +336,24 @@ Tables
 
                     {
                         inlineData: {
-                            mimeType: "image/png",
-                            data: chart30M
+
+                            mimeType:
+                                "image/png",
+
+                            data:
+                                chart30M
+
                         }
+
                     },
 
                     {
-                        text: prompt
+                        text:
+                            prompt
                     }
 
                 ]
+
             });
 
         const text =
@@ -310,66 +374,34 @@ Tables
             "================================="
         );
 
-        function getValue(label) {
-
-            const escapedLabel =
-                label.replace(
-                    /[.*+?^${}()|[\]\\]/g,
-                    "\\$&"
-                );
-
-            const regex =
-                new RegExp(
-                    "^\\s*" +
-                    escapedLabel +
-                    "\\s*:\\s*(.+)$",
-                    "im"
-                );
-
-            const match =
-                text.match(regex);
-
-            return match
-                ? match[1].trim()
-                : "-";
-        }
-
-        const signal =
-            getValue("Signal");
-
-        const entry =
-            getValue("Entry");
-
-        const stopLoss =
-            getValue("Stop Loss");
-
-        const target =
-            getValue("Target");
-
-        const riskReward =
-            getValue("Risk Reward");
-
-        const reason =
-            getValue("Reason");
-
         res.json({
 
             success: true,
 
-            signal,
+            signal:
+                getValue(text, "Signal"),
 
-            entry,
+            entry:
+                getValue(text, "Entry"),
 
-            stopLoss,
+            stopLoss:
+                getValue(text, "Stop Loss"),
 
-            target,
+            target:
+                getValue(text, "Target"),
 
-            riskReward,
+            riskReward:
+                getValue(
+                    text,
+                    "Risk Reward"
+                ),
 
-            reason,
+            reason:
+                getValue(text, "Reason"),
 
             raw:
                 text
+
         });
 
     } catch (error) {
@@ -385,12 +417,15 @@ Tables
 
             error:
                 error.message
+
         });
+
     }
+
 });
 
 // =====================================
-// LIVE MARKET DATA
+// LIVE MARKET INTERVALS
 // =====================================
 
 const LIVE_INTERVALS = {
@@ -428,7 +463,9 @@ function normalizeCandle(candle) {
 
         close:
             Number(candle.close)
+
     };
+
 }
 
 // =====================================
@@ -448,6 +485,7 @@ async function getRecentCandles(
         throw new Error(
             `Unsupported resolution: ${resolution}`
         );
+
     }
 
     const now =
@@ -485,6 +523,7 @@ async function getRecentCandles(
         throw new Error(
             `${resolution} API error ${response.status}: ${errorText}`
         );
+
     }
 
     const data =
@@ -499,6 +538,7 @@ async function getRecentCandles(
         throw new Error(
             `${resolution}: candle data unavailable`
         );
+
     }
 
     const candles =
@@ -515,9 +555,11 @@ async function getRecentCandles(
 
         candle.intervalSeconds =
             interval;
+
     }
 
     return candles;
+
 }
 
 // =====================================
@@ -534,6 +576,7 @@ function getLastClosedCandle(
     ) {
 
         return null;
+
     }
 
     const now =
@@ -558,13 +601,19 @@ function getLastClosedCandle(
         ) {
 
             return {
+
                 candle,
+
                 index: i
+
             };
+
         }
+
     }
 
     return null;
+
 }
 
 // =====================================
@@ -582,6 +631,7 @@ function calculateEMA(
     ) {
 
         return [];
+
     }
 
     const ema =
@@ -599,6 +649,7 @@ function calculateEMA(
 
         sum +=
             candles[i].close;
+
     }
 
     let previous =
@@ -608,8 +659,7 @@ function calculateEMA(
         previous;
 
     const multiplier =
-        2 /
-        (period + 1);
+        2 / (period + 1);
 
     for (
         let i = period;
@@ -633,9 +683,11 @@ function calculateEMA(
 
         previous =
             value;
+
     }
 
     return ema;
+
 }
 
 // =====================================
@@ -654,10 +706,13 @@ function detectCrossover(
     ) {
 
         return "NONE";
+
     }
 
     if (index < 1) {
+
         return "NONE";
+
     }
 
     const previousFast =
@@ -680,36 +735,40 @@ function detectCrossover(
     ) {
 
         return "NONE";
+
     }
 
-    // EMA9 crosses ABOVE EMA26
+    // BUY crossover
     if (
         previousFast <= previousSlow &&
         currentFast > currentSlow
     ) {
 
         return "BULLISH";
+
     }
 
-    // EMA9 crosses BELOW EMA26
+    // SELL crossover
     if (
         previousFast >= previousSlow &&
         currentFast < currentSlow
     ) {
 
         return "BEARISH";
+
     }
 
     return "NONE";
+
 }
 
 // =====================================
-// CALCULATE TRADE LEVELS
+// TRADE LEVEL CALCULATION
 // =====================================
 
 function calculateTradeLevels(
     signal,
-    price,
+    entry,
     support,
     resistance
 ) {
@@ -719,16 +778,28 @@ function calculateTradeLevels(
         signal !== "SELL"
     ) {
 
-        return {
-            entry: null,
-            stopLoss: null,
-            target: null,
-            riskReward: null
-        };
+        return null;
+
     }
 
-    let entry =
-        Number(price);
+    entry =
+        Number(entry);
+
+    support =
+        Number(support);
+
+    resistance =
+        Number(resistance);
+
+    if (
+        !Number.isFinite(entry) ||
+        !Number.isFinite(support) ||
+        !Number.isFinite(resistance)
+    ) {
+
+        return null;
+
+    }
 
     let stopLoss;
     let target;
@@ -737,96 +808,88 @@ function calculateTradeLevels(
     // BUY
     // =================================
 
-    if (signal === "BUY") {
+    if (
+        signal === "BUY"
+    ) {
 
         stopLoss =
-            Number(support);
+            support;
 
         const risk =
-            entry -
-            stopLoss;
+            entry - stopLoss;
 
         if (
-            !Number.isFinite(risk) ||
             risk <= 0
         ) {
 
-            return {
-                entry: null,
-                stopLoss: null,
-                target: null,
-                riskReward: null
-            };
+            return null;
+
         }
 
         target =
             entry +
             risk * 2;
 
-        // Target must have room
-        // beyond current resistance.
+        // There must be enough room
+        // before resistance.
+
         if (
-            Number.isFinite(resistance) &&
             target > resistance
         ) {
 
-            target =
-                resistance;
+            return null;
+
         }
+
     }
 
     // =================================
     // SELL
     // =================================
 
-    if (signal === "SELL") {
+    if (
+        signal === "SELL"
+    ) {
 
         stopLoss =
-            Number(resistance);
+            resistance;
 
         const risk =
-            stopLoss -
-            entry;
+            stopLoss - entry;
 
         if (
-            !Number.isFinite(risk) ||
             risk <= 0
         ) {
 
-            return {
-                entry: null,
-                stopLoss: null,
-                target: null,
-                riskReward: null
-            };
+            return null;
+
         }
 
         target =
             entry -
             risk * 2;
 
-        // Target must have room
-        // beyond current support.
+        // There must be enough room
+        // before support.
+
         if (
-            Number.isFinite(support) &&
             target < support
         ) {
 
-            target =
-                support;
+            return null;
+
         }
+
     }
 
     const risk =
         Math.abs(
-            entry -
-            stopLoss
+            entry - stopLoss
         );
 
     const reward =
         Math.abs(
-            target -
-            entry
+            target - entry
         );
 
     if (
@@ -834,26 +897,19 @@ function calculateTradeLevels(
         reward <= 0
     ) {
 
-        return {
-            entry: null,
-            stopLoss: null,
-            target: null,
-            riskReward: null
-        };
+        return null;
+
     }
 
     const rr =
         reward / risk;
 
-    // Minimum 1:2
-    if (rr < 2) {
+    if (
+        rr < 2
+    ) {
 
-        return {
-            entry: null,
-            stopLoss: null,
-            target: null,
-            riskReward: null
-        };
+        return null;
+
     }
 
     return {
@@ -875,7 +931,9 @@ function calculateTradeLevels(
 
         riskReward:
             `1:${rr.toFixed(2)}`
+
     };
+
 }
 
 // =====================================
@@ -889,7 +947,7 @@ app.get(
         try {
 
             // ---------------------------------
-            // GET CANDLES
+            // GET 30M / 1H / 4H
             // ---------------------------------
 
             const candles30m =
@@ -978,6 +1036,7 @@ app.get(
                 throw new Error(
                     "Not enough closed candles"
                 );
+
             }
 
             const i30 =
@@ -1010,7 +1069,7 @@ app.get(
                     : "BEARISH";
 
             // ---------------------------------
-            // 30M EMA TREND
+            // 30M TREND
             // ---------------------------------
 
             let ema30mTrend =
@@ -1023,15 +1082,17 @@ app.get(
 
                 ema30mTrend =
                     "BULLISH";
+
             }
 
-            if (
+            else if (
                 ema30m9[i30] <
                 ema30m26[i30]
             ) {
 
                 ema30mTrend =
                     "BEARISH";
+
             }
 
             // ---------------------------------
@@ -1059,19 +1120,21 @@ app.get(
 
                 alert =
                     "🟢 BUY CROSSOVER — EMA9 crossed ABOVE EMA26 on 30M";
+
             }
 
-            if (
+            else if (
                 crossover ===
                 "BEARISH"
             ) {
 
                 alert =
                     "🔴 SELL CROSSOVER — EMA9 crossed BELOW EMA26 on 30M";
+
             }
 
             // ---------------------------------
-            // FINAL SIGNAL
+            // INITIAL SIGNAL
             // ---------------------------------
 
             let signal =
@@ -1085,9 +1148,10 @@ app.get(
 
                 signal =
                     "BUY";
+
             }
 
-            if (
+            else if (
                 trend4h === "BEARISH" &&
                 trend1h === "BEARISH" &&
                 ema30mTrend === "BEARISH"
@@ -1095,13 +1159,14 @@ app.get(
 
                 signal =
                     "SELL";
+
             }
 
             // ---------------------------------
-            // PRICE
+            // ENTRY PRICE
             // ---------------------------------
 
-            const price =
+            const entryPrice =
                 closed30m.candle.close;
 
             // ---------------------------------
@@ -1114,14 +1179,16 @@ app.get(
             const support =
                 Math.min(
                     ...recent30.map(
-                        c => c.low
+                        candle =>
+                            candle.low
                     )
                 );
 
             const resistance =
                 Math.max(
                     ...recent30.map(
-                        c => c.high
+                        candle =>
+                            candle.high
                     )
                 );
 
@@ -1132,23 +1199,20 @@ app.get(
             const trade =
                 calculateTradeLevels(
                     signal,
-                    price,
+                    entryPrice,
                     support,
                     resistance
                 );
 
-            // If RR is not at least 1:2,
-            // final decision becomes NO TRADE.
+            // ---------------------------------
+            // FINAL DECISION
+            // ---------------------------------
 
-            if (
-                !trade.entry ||
-                !trade.stopLoss ||
-                !trade.target ||
-                !trade.riskReward
-            ) {
+            if (!trade) {
 
                 signal =
                     "NO TRADE";
+
             }
 
             // ---------------------------------
@@ -1162,11 +1226,13 @@ app.get(
                 symbol:
                     SYMBOL,
 
-                signal,
+                signal:
+
+                    signal,
 
                 price:
                     Number(
-                        price.toFixed(2)
+                        entryPrice.toFixed(2)
                     ),
 
                 trend4h,
@@ -1180,34 +1246,24 @@ app.get(
                 alert,
 
                 entry:
-                    signal === "NO TRADE"
-                        ? null
-                        : trade.entry,
+                    trade
+                        ? trade.entry
+                        : null,
 
                 stopLoss:
-                    signal === "NO TRADE"
-                        ? null
-                        : trade.stopLoss,
+                    trade
+                        ? trade.stopLoss
+                        : null,
 
                 target:
-                    signal === "NO TRADE"
-                        ? null
-                        : trade.target,
+                    trade
+                        ? trade.target
+                        : null,
 
                 riskReward:
-                    signal === "NO TRADE"
-                        ? null
-                        : trade.riskReward,
-
-                support:
-                    Number(
-                        support.toFixed(2)
-                    ),
-
-                resistance:
-                    Number(
-                        resistance.toFixed(2)
-                    ),
+                    trade
+                        ? trade.riskReward
+                        : null,
 
                 candleTime:
                     new Date(
@@ -1216,6 +1272,7 @@ app.get(
                     ).toISOString(),
 
                 crossoverCandleTime:
+
                     crossover !== "NONE"
                         ? new Date(
                             closed30m.candle.time *
@@ -1225,6 +1282,7 @@ app.get(
 
                 updatedAt:
                     new Date().toISOString()
+
             });
 
         } catch (error) {
@@ -1240,8 +1298,11 @@ app.get(
 
                 error:
                     error.message
+
             });
+
         }
+
     }
 );
 
@@ -1293,6 +1354,22 @@ app.listen(
         );
 
         console.log(
+            "STRATEGY = 4H + 1H + 30M"
+        );
+
+        console.log(
+            "ENTRY = 30M CLOSED CANDLE"
+        );
+
+        console.log(
+            "MINIMUM RR = 1:2"
+        );
+
+        console.log(
+            "5M = DISABLED"
+        );
+
+        console.log(
             "MODEL =",
             MODEL
         );
@@ -1305,5 +1382,6 @@ app.listen(
         console.log(
             "================================="
         );
+
     }
 );
