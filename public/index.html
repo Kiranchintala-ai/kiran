@@ -2,6 +2,7 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -15,6 +16,7 @@
         rel="stylesheet"
         href="style.css"
     >
+
 </head>
 
 <body>
@@ -24,15 +26,17 @@
     <h1>📈 AI Trading Assistant</h1>
 
     <p class="subtitle">
-        BTC/USD Live Multi-Timeframe Analysis
+        BTC/USD Live EMA9 + EMA26 Analysis
     </p>
 
 
+    <!-- ========================= -->
     <!-- LIVE PRICE -->
+    <!-- ========================= -->
 
     <div class="result-card">
 
-        <h2>💰 Live BTC/USD</h2>
+        <h2>💰 BTC/USD</h2>
 
         <div
             id="price"
@@ -51,7 +55,9 @@
     </div>
 
 
-    <!-- TREND -->
+    <!-- ========================= -->
+    <!-- MARKET TREND -->
+    <!-- ========================= -->
 
     <div class="result-card">
 
@@ -71,14 +77,23 @@
             1H Trend: -
         </div>
 
+        <div
+            id="trend30m"
+            class="result-row"
+        >
+            30M Trend: -
+        </div>
+
     </div>
 
 
-    <!-- EMA -->
+    <!-- ========================= -->
+    <!-- CROSSOVER -->
+    <!-- ========================= -->
 
     <div class="result-card">
 
-        <h2>📈 EMA 9 / EMA 26</h2>
+        <h2>📈 EMA9 / EMA26</h2>
 
         <div
             id="crossover"
@@ -87,17 +102,12 @@
             30M Crossover: -
         </div>
 
-        <div
-            id="confirmation"
-            class="result-row"
-        >
-            5M Confirmation: -
-        </div>
-
     </div>
 
 
-    <!-- SIGNAL -->
+    <!-- ========================= -->
+    <!-- TRADING DECISION -->
+    <!-- ========================= -->
 
     <div
         id="tradingDecision"
@@ -106,6 +116,7 @@
 
         <h2>🚦 Trading Decision</h2>
 
+
         <div
             id="signal"
             class="result-row"
@@ -113,24 +124,44 @@
             Signal: -
         </div>
 
-        <div
-            id="support"
-            class="result-row"
-        >
-            Support: -
-        </div>
 
         <div
-            id="resistance"
+            id="entry"
             class="result-row"
         >
-            Resistance: -
+            Entry: -
+        </div>
+
+
+        <div
+            id="stoploss"
+            class="result-row"
+        >
+            Stop Loss: -
+        </div>
+
+
+        <div
+            id="target"
+            class="result-row"
+        >
+            Target: -
+        </div>
+
+
+        <div
+            id="rr"
+            class="result-row"
+        >
+            Risk Reward: -
         </div>
 
     </div>
 
 
+    <!-- ========================= -->
     <!-- STATUS -->
+    <!-- ========================= -->
 
     <div
         id="result"
@@ -140,7 +171,9 @@
     </div>
 
 
+    <!-- ========================= -->
     <!-- NOTIFICATION -->
+    <!-- ========================= -->
 
     <div
         id="notification"
@@ -148,6 +181,10 @@
         style="display:none;"
     ></div>
 
+
+    <!-- ========================= -->
+    <!-- REFRESH -->
+    <!-- ========================= -->
 
     <button
         id="refreshBtn"
