@@ -1,14 +1,410 @@
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
+const fs = require("fs");
+const { GoogleGenAI } = require("@google/genai");
+
+const app = express();
+
+// =====================================
+// CONFIG
+// =====================================
+
+const PORT = process.env.PORT || 3000;
+
+const MODEL = "gemini-3.6-flash";
+
+const DELTA_API =
+    "https://api.india.delta.exchange/v2/history/candles";
+
+const SYMBOL = "BTCUSD";
+
+// =====================================
+// MIDDLEWARE
+// =====================================
+
+app.use(cors());
+
+app.use(
+    express.json({
+        limit: "30mb"
+    })
+);
+
+// =====================================
+// GEMINI
+// =====================================
+
+if (!process.env.GEMINI_API_KEY) {
+    console.error("ERROR: GEMINI_API_KEY is missing.");
+    process.exit(1);
+}
+
+const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY
+});
+
+// =====================================
+// FRONTEND
+// =====================================
+
+const publicFolder = path.join(__dirname, "public");
+
+if (fs.existsSync(publicFolder)) {
+    app.use(express.static(publicFolder));
+}
+
+// =====================================
+// HOME
+// =====================================
+
+app.get("/", (req, res) => {
+    const indexPath = path.join(
+        publicFolder,
+        "index.html"
+    );
+
+    if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+    }
+
+    res.send("AI Trading Server Running");
+});
+
+// =====================================
+// HEALTH
+// =====================================
+
+app.get("/health", (req, res) => {
+    res.json({
+        success: true,
+        message: "AI Trading Server is running",
+        model: MODEL,
+        time: new Date().toISOString()
+    });
+});
+
+// =====================================
+// TEST AI
+// =====================================
+
+app.get("/test-ai", async (req, res) => {
+    try {
+        const response =
+            await ai.models.generateContent({
+                model: MODEL,
+                contents:
+                    "Reply with only one word: SUCCESS"
+            });
+
+        res.json({
+            success: true,
+            reply:
+                response.text || "SUCCESS"
+        });
+
+    } catch (error) {
+
+        console.error(
+            "TEST AI ERROR:",
+            error
+        );
+
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// =====================================
+// IMAGE CLEANER
+// =====================================
+
+function cleanBase64(image) {
+
+    if (typeof image !== "string") {
+        return image;
+    }
+
+    return image.replace(
+        /^data:image\/[a-zA-Z0-9.+-]+;base64,/,
+        ""
+    );
+}
+
+// =====================================
+// IMAGE ANALYSIS
+// =====================================
+
+app.post("/analyze", async (req, res) => {
+
+    try {
+
+        const {
+            image1H,
+            image30M
+        } = req.body;
+
+        if (
+            !image1H ||
+            !image30M
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                error:
+                    "Please upload both 1H and 30M charts."
+            });
+        }
+
+        const chart1H =
+            cleanBase64(image1H);
+
+        const chart30M =
+            cleanBase64(image30M);
+
+        const prompt = `
+
+You are a disciplined BTC/USD technical analysis assistant.
+
+The user supplied two TradingView charts.
+
+1H = higher timeframe trend
+30M = main setup and entry timeframe
+
+Analyze ONLY the supplied charts.
+
+Do NOT force a trade.
+
+The final signal must be exactly:
+
+BUY
+SELL
+NO TRADE
+
+Analyze:
+
+1H:
+- Overall trend
+- Market structure
+- Higher highs
+- Higher lows
+- Lower highs
+- Lower lows
+- Major support
+- Major resistance
+
+30M:
+- EMA9
+- EMA26
+- Crossover
+- Breakout
+- Breakdown
+- Retest
+- Rejection
+- Momentum
+- Entry area
+- Stop loss area
+- Target area
+
+Important:
+
+Do NOT automatically choose BUY.
+
+Do NOT automatically choose SELL.
+
+If the setup is unclear, return NO TRADE.
+
+If 1H and 30M conflict, return NO TRADE.
+
+Do not invent prices.
+
+Do not invent support or resistance.
+
+Do not invent volume.
+
+Risk:Reward must be at least 1:2.
+
+If Risk:Reward is below 1:2, return NO TRADE.
+
+Return ONLY these lines:
+
+Signal: BUY or SELL or NO TRADE
+Entry: price or -
+Stop Loss: price or -
+Target: price or -
+Risk Reward: 1:2 or better, or -
+Reason: short reason
+
+Do NOT return:
+
+5M
+Confidence
+EMA values
+Support
+Resistance
+Trend
+Confirmation
+Long explanations
+Markdown
+Tables
+
+`;
+
+        const response =
+            await ai.models.generateContent({
+
+                model: MODEL,
+
+                contents: [
+
+                    {
+                        text:
+                            "IMAGE 1 — 1H BTC/USD CHART"
+                    },
+
+                    {
+                        inlineData: {
+                            mimeType: "image/png",
+                            data: chart1H
+                        }
+                    },
+
+                    {
+                        text:
+                            "IMAGE 2 — 30M BTC/USD CHART"
+                    },
+
+                    {
+                        inlineData: {
+                            mimeType: "image/png",
+                            data: chart30M
+                        }
+                    },
+
+                    {
+                        text: prompt
+                    }
+
+                ]
+            });
+
+        const text =
+            response.text || "";
+
+        console.log("");
+        console.log(
+            "================================="
+        );
+        console.log(
+            "AI IMAGE ANALYSIS"
+        );
+        console.log(
+            "================================="
+        );
+        console.log(text);
+        console.log(
+            "================================="
+        );
+
+        function getValue(label) {
+
+            const escapedLabel =
+                label.replace(
+                    /[.*+?^${}()|[\]\\]/g,
+                    "\\$&"
+                );
+
+            const regex =
+                new RegExp(
+                    "^\\s*" +
+                    escapedLabel +
+                    "\\s*:\\s*(.+)$",
+                    "im"
+                );
+
+            const match =
+                text.match(regex);
+
+            return match
+                ? match[1].trim()
+                : "-";
+        }
+
+        const signal =
+            getValue("Signal");
+
+        const entry =
+            getValue("Entry");
+
+        const stopLoss =
+            getValue("Stop Loss");
+
+        const target =
+            getValue("Target");
+
+        const riskReward =
+            getValue("Risk Reward");
+
+        const reason =
+            getValue("Reason");
+
+        res.json({
+
+            success: true,
+
+            signal,
+
+            entry,
+
+            stopLoss,
+
+            target,
+
+            riskReward,
+
+            reason,
+
+            raw:
+                text
+        });
+
+    } catch (error) {
+
+        console.error(
+            "IMAGE ANALYSIS ERROR:",
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            error:
+                error.message
+        });
+    }
+});
+
 // =====================================
 // LIVE MARKET DATA
 // =====================================
 
 const LIVE_INTERVALS = {
-    "30m": 30 * 60,
-    "1h": 60 * 60,
-    "4h": 4 * 60 * 60
-};
 
-const TRADE_RR = 2;
+    "30m":
+        30 * 60,
+
+    "1h":
+        60 * 60,
+
+    "4h":
+        4 * 60 * 60
+
+};
 
 // =====================================
 // NORMALIZE CANDLE
@@ -17,11 +413,21 @@ const TRADE_RR = 2;
 function normalizeCandle(candle) {
 
     return {
-        time: Number(candle.time),
-        open: Number(candle.open),
-        high: Number(candle.high),
-        low: Number(candle.low),
-        close: Number(candle.close)
+
+        time:
+            Number(candle.time),
+
+        open:
+            Number(candle.open),
+
+        high:
+            Number(candle.high),
+
+        low:
+            Number(candle.low),
+
+        close:
+            Number(candle.close)
     };
 }
 
@@ -38,16 +444,20 @@ async function getRecentCandles(
         LIVE_INTERVALS[resolution];
 
     if (!interval) {
+
         throw new Error(
             `Unsupported resolution: ${resolution}`
         );
     }
 
     const now =
-        Math.floor(Date.now() / 1000);
+        Math.floor(
+            Date.now() / 1000
+        );
 
     const start =
-        now - count * interval;
+        now -
+        count * interval;
 
     const url =
         DELTA_API +
@@ -57,11 +467,15 @@ async function getRecentCandles(
         `&end=${now}`;
 
     const response =
-        await fetch(url, {
-            headers: {
-                Accept: "application/json"
+        await fetch(
+            url,
+            {
+                headers: {
+                    Accept:
+                        "application/json"
+                }
             }
-        });
+        );
 
     if (!response.ok) {
 
@@ -76,7 +490,11 @@ async function getRecentCandles(
     const data =
         await response.json();
 
-    if (!Array.isArray(data.result)) {
+    if (
+        !Array.isArray(
+            data.result
+        )
+    ) {
 
         throw new Error(
             `${resolution}: candle data unavailable`
@@ -91,7 +509,10 @@ async function getRecentCandles(
                     a.time - b.time
             );
 
-    for (const candle of candles) {
+    for (
+        const candle of candles
+    ) {
+
         candle.intervalSeconds =
             interval;
     }
@@ -103,20 +524,26 @@ async function getRecentCandles(
 // LAST CLOSED CANDLE
 // =====================================
 
-function getLastClosedCandle(candles) {
+function getLastClosedCandle(
+    candles
+) {
 
     if (
         !candles ||
         candles.length === 0
     ) {
+
         return null;
     }
 
     const now =
-        Math.floor(Date.now() / 1000);
+        Math.floor(
+            Date.now() / 1000
+        );
 
     for (
-        let i = candles.length - 1;
+        let i =
+            candles.length - 1;
         i >= 0;
         i--
     ) {
@@ -126,7 +553,8 @@ function getLastClosedCandle(candles) {
 
         if (
             candle.time +
-            candle.intervalSeconds <= now
+            candle.intervalSeconds
+            <= now
         ) {
 
             return {
@@ -152,12 +580,14 @@ function calculateEMA(
         !Array.isArray(candles) ||
         candles.length < period
     ) {
+
         return [];
     }
 
     const ema =
-        new Array(candles.length)
-            .fill(null);
+        new Array(
+            candles.length
+        ).fill(null);
 
     let sum = 0;
 
@@ -166,7 +596,9 @@ function calculateEMA(
         i < period;
         i++
     ) {
-        sum += candles[i].close;
+
+        sum +=
+            candles[i].close;
     }
 
     let previous =
@@ -176,7 +608,8 @@ function calculateEMA(
         previous;
 
     const multiplier =
-        2 / (period + 1);
+        2 /
+        (period + 1);
 
     for (
         let i = period;
@@ -189,8 +622,11 @@ function calculateEMA(
 
         const value =
             (
-                current - previous
-            ) * multiplier + previous;
+                current -
+                previous
+            ) *
+            multiplier +
+            previous;
 
         ema[i] =
             value;
@@ -216,6 +652,7 @@ function detectCrossover(
         !Array.isArray(fastEMA) ||
         !Array.isArray(slowEMA)
     ) {
+
         return "NONE";
     }
 
@@ -241,26 +678,204 @@ function detectCrossover(
         currentFast === null ||
         currentSlow === null
     ) {
+
         return "NONE";
     }
 
-    // BUY CROSSOVER
+    // EMA9 crosses ABOVE EMA26
     if (
         previousFast <= previousSlow &&
         currentFast > currentSlow
     ) {
+
         return "BULLISH";
     }
 
-    // SELL CROSSOVER
+    // EMA9 crosses BELOW EMA26
     if (
         previousFast >= previousSlow &&
         currentFast < currentSlow
     ) {
+
         return "BEARISH";
     }
 
     return "NONE";
+}
+
+// =====================================
+// CALCULATE TRADE LEVELS
+// =====================================
+
+function calculateTradeLevels(
+    signal,
+    price,
+    support,
+    resistance
+) {
+
+    if (
+        signal !== "BUY" &&
+        signal !== "SELL"
+    ) {
+
+        return {
+            entry: null,
+            stopLoss: null,
+            target: null,
+            riskReward: null
+        };
+    }
+
+    let entry =
+        Number(price);
+
+    let stopLoss;
+    let target;
+
+    // =================================
+    // BUY
+    // =================================
+
+    if (signal === "BUY") {
+
+        stopLoss =
+            Number(support);
+
+        const risk =
+            entry -
+            stopLoss;
+
+        if (
+            !Number.isFinite(risk) ||
+            risk <= 0
+        ) {
+
+            return {
+                entry: null,
+                stopLoss: null,
+                target: null,
+                riskReward: null
+            };
+        }
+
+        target =
+            entry +
+            risk * 2;
+
+        // Target must have room
+        // beyond current resistance.
+        if (
+            Number.isFinite(resistance) &&
+            target > resistance
+        ) {
+
+            target =
+                resistance;
+        }
+    }
+
+    // =================================
+    // SELL
+    // =================================
+
+    if (signal === "SELL") {
+
+        stopLoss =
+            Number(resistance);
+
+        const risk =
+            stopLoss -
+            entry;
+
+        if (
+            !Number.isFinite(risk) ||
+            risk <= 0
+        ) {
+
+            return {
+                entry: null,
+                stopLoss: null,
+                target: null,
+                riskReward: null
+            };
+        }
+
+        target =
+            entry -
+            risk * 2;
+
+        // Target must have room
+        // beyond current support.
+        if (
+            Number.isFinite(support) &&
+            target < support
+        ) {
+
+            target =
+                support;
+        }
+    }
+
+    const risk =
+        Math.abs(
+            entry -
+            stopLoss
+        );
+
+    const reward =
+        Math.abs(
+            target -
+            entry
+        );
+
+    if (
+        risk <= 0 ||
+        reward <= 0
+    ) {
+
+        return {
+            entry: null,
+            stopLoss: null,
+            target: null,
+            riskReward: null
+        };
+    }
+
+    const rr =
+        reward / risk;
+
+    // Minimum 1:2
+    if (rr < 2) {
+
+        return {
+            entry: null,
+            stopLoss: null,
+            target: null,
+            riskReward: null
+        };
+    }
+
+    return {
+
+        entry:
+            Number(
+                entry.toFixed(2)
+            ),
+
+        stopLoss:
+            Number(
+                stopLoss.toFixed(2)
+            ),
+
+        target:
+            Number(
+                target.toFixed(2)
+            ),
+
+        riskReward:
+            `1:${rr.toFixed(2)}`
+    };
 }
 
 // =====================================
@@ -274,7 +889,7 @@ app.get(
         try {
 
             // ---------------------------------
-            // ONLY 30M + 1H + 4H
+            // GET CANDLES
             // ---------------------------------
 
             const candles30m =
@@ -395,14 +1010,29 @@ app.get(
                     : "BEARISH";
 
             // ---------------------------------
-            // 30M TREND
+            // 30M EMA TREND
             // ---------------------------------
 
-            const trend30m =
+            let ema30mTrend =
+                "SIDEWAYS";
+
+            if (
                 ema30m9[i30] >
                 ema30m26[i30]
-                    ? "BULLISH"
-                    : "BEARISH";
+            ) {
+
+                ema30mTrend =
+                    "BULLISH";
+            }
+
+            if (
+                ema30m9[i30] <
+                ema30m26[i30]
+            ) {
+
+                ema30mTrend =
+                    "BEARISH";
+            }
 
             // ---------------------------------
             // 30M CROSSOVER
@@ -416,189 +1046,56 @@ app.get(
                 );
 
             // ---------------------------------
-            // DEFAULT
+            // CROSSOVER ALERT
+            // ---------------------------------
+
+            let alert =
+                "NONE";
+
+            if (
+                crossover ===
+                "BULLISH"
+            ) {
+
+                alert =
+                    "🟢 BUY CROSSOVER — EMA9 crossed ABOVE EMA26 on 30M";
+            }
+
+            if (
+                crossover ===
+                "BEARISH"
+            ) {
+
+                alert =
+                    "🔴 SELL CROSSOVER — EMA9 crossed BELOW EMA26 on 30M";
+            }
+
+            // ---------------------------------
+            // FINAL SIGNAL
             // ---------------------------------
 
             let signal =
                 "NO TRADE";
 
-            let entry = null;
-            let stopLoss = null;
-            let target = null;
-
-            let alert =
-                "NONE";
-
-            // ---------------------------------
-            // RECENT 30M CANDLES
-            // ---------------------------------
-
-            const recent30 =
-                candles30m.slice(-20);
-
-            // ---------------------------------
-            // BUY SETUP
-            // ---------------------------------
-
             if (
                 trend4h === "BULLISH" &&
                 trend1h === "BULLISH" &&
-                crossover === "BULLISH"
+                ema30mTrend === "BULLISH"
             ) {
 
-                const currentEntry =
-                    closed30m.candle.close;
-
-                const swingLow =
-                    Math.min(
-                        ...candles30m
-                            .slice(
-                                Math.max(
-                                    0,
-                                    i30 - 9
-                                ),
-                                i30 + 1
-                            )
-                            .map(
-                                c => c.low
-                            )
-                    );
-
-                const risk =
-                    currentEntry -
-                    swingLow;
-
-                if (risk > 0) {
-
-                    const calculatedTarget =
-                        currentEntry +
-                        risk * TRADE_RR;
-
-                    const resistance =
-                        Math.max(
-                            ...recent30.map(
-                                c => c.high
-                            )
-                        );
-
-                    // 2R target must have room
-                    if (
-                        calculatedTarget <=
-                        resistance
-                    ) {
-
-                        signal =
-                            "BUY";
-
-                        entry =
-                            Number(
-                                currentEntry.toFixed(2)
-                            );
-
-                        stopLoss =
-                            Number(
-                                swingLow.toFixed(2)
-                            );
-
-                        target =
-                            Number(
-                                calculatedTarget.toFixed(2)
-                            );
-
-                        alert =
-                            "🟢 BUY CROSSOVER — 30M EMA9 crossed ABOVE EMA26";
-                    }
-                }
+                signal =
+                    "BUY";
             }
-
-            // ---------------------------------
-            // SELL SETUP
-            // ---------------------------------
 
             if (
                 trend4h === "BEARISH" &&
                 trend1h === "BEARISH" &&
-                crossover === "BEARISH"
+                ema30mTrend === "BEARISH"
             ) {
 
-                const currentEntry =
-                    closed30m.candle.close;
-
-                const swingHigh =
-                    Math.max(
-                        ...candles30m
-                            .slice(
-                                Math.max(
-                                    0,
-                                    i30 - 9
-                                ),
-                                i30 + 1
-                            )
-                            .map(
-                                c => c.high
-                            )
-                    );
-
-                const risk =
-                    swingHigh -
-                    currentEntry;
-
-                if (risk > 0) {
-
-                    const calculatedTarget =
-                        currentEntry -
-                        risk * TRADE_RR;
-
-                    const support =
-                        Math.min(
-                            ...recent30.map(
-                                c => c.low
-                            )
-                        );
-
-                    // 2R target must have room
-                    if (
-                        calculatedTarget >=
-                        support
-                    ) {
-
-                        signal =
-                            "SELL";
-
-                        entry =
-                            Number(
-                                currentEntry.toFixed(2)
-                            );
-
-                        stopLoss =
-                            Number(
-                                swingHigh.toFixed(2)
-                            );
-
-                        target =
-                            Number(
-                                calculatedTarget.toFixed(2)
-                            );
-
-                        alert =
-                            "🔴 SELL CROSSOVER — 30M EMA9 crossed BELOW EMA26";
-                    }
-                }
+                signal =
+                    "SELL";
             }
-
-            // ---------------------------------
-            // CROSSOVER ALERT
-            // ---------------------------------
-
-            const crossoverCandleTime =
-                new Date(
-                    closed30m.candle.time * 1000
-                ).toISOString();
-
-            const alertId =
-                crossover !== "NONE"
-                    ? `${crossover}-${crossoverCandleTime}`
-                    : null;
 
             // ---------------------------------
             // PRICE
@@ -606,6 +1103,53 @@ app.get(
 
             const price =
                 closed30m.candle.close;
+
+            // ---------------------------------
+            // SUPPORT / RESISTANCE
+            // ---------------------------------
+
+            const recent30 =
+                candles30m.slice(-20);
+
+            const support =
+                Math.min(
+                    ...recent30.map(
+                        c => c.low
+                    )
+                );
+
+            const resistance =
+                Math.max(
+                    ...recent30.map(
+                        c => c.high
+                    )
+                );
+
+            // ---------------------------------
+            // TRADE LEVELS
+            // ---------------------------------
+
+            const trade =
+                calculateTradeLevels(
+                    signal,
+                    price,
+                    support,
+                    resistance
+                );
+
+            // If RR is not at least 1:2,
+            // final decision becomes NO TRADE.
+
+            if (
+                !trade.entry ||
+                !trade.stopLoss ||
+                !trade.target ||
+                !trade.riskReward
+            ) {
+
+                signal =
+                    "NO TRADE";
+            }
 
             // ---------------------------------
             // RESPONSE
@@ -618,32 +1162,66 @@ app.get(
                 symbol:
                     SYMBOL,
 
+                signal,
+
                 price:
                     Number(
                         price.toFixed(2)
                     ),
 
-                signal,
-
-                entry,
-
-                stopLoss,
-
-                target,
-
                 trend4h,
 
                 trend1h,
 
-                trend30m,
+                ema30mTrend,
 
                 crossover,
 
                 alert,
 
-                alertId,
+                entry:
+                    signal === "NO TRADE"
+                        ? null
+                        : trade.entry,
 
-                crossoverCandleTime,
+                stopLoss:
+                    signal === "NO TRADE"
+                        ? null
+                        : trade.stopLoss,
+
+                target:
+                    signal === "NO TRADE"
+                        ? null
+                        : trade.target,
+
+                riskReward:
+                    signal === "NO TRADE"
+                        ? null
+                        : trade.riskReward,
+
+                support:
+                    Number(
+                        support.toFixed(2)
+                    ),
+
+                resistance:
+                    Number(
+                        resistance.toFixed(2)
+                    ),
+
+                candleTime:
+                    new Date(
+                        closed30m.candle.time *
+                        1000
+                    ).toISOString(),
+
+                crossoverCandleTime:
+                    crossover !== "NONE"
+                        ? new Date(
+                            closed30m.candle.time *
+                            1000
+                        ).toISOString()
+                        : null,
 
                 updatedAt:
                     new Date().toISOString()
@@ -664,5 +1242,68 @@ app.get(
                     error.message
             });
         }
+    }
+);
+
+// =====================================
+// START SERVER
+// =====================================
+
+app.listen(
+    PORT,
+    "0.0.0.0",
+    () => {
+
+        console.log("");
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "AI TRADING SERVER RUNNING"
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "HOME       = /"
+        );
+
+        console.log(
+            "HEALTH     = /health"
+        );
+
+        console.log(
+            "TEST AI    = /test-ai"
+        );
+
+        console.log(
+            "IMAGE AI   = /analyze"
+        );
+
+        console.log(
+            "LIVE AI    = /live-analysis"
+        );
+
+        console.log(
+            "================================="
+        );
+
+        console.log(
+            "MODEL =",
+            MODEL
+        );
+
+        console.log(
+            "PORT =",
+            PORT
+        );
+
+        console.log(
+            "================================="
+        );
     }
 );
