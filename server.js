@@ -1,12 +1,10 @@
-# Complete `public/server.js`
-
-```js
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
+const webpush = require("web-push");
 const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
@@ -50,10 +48,40 @@ const ai = new GoogleGenAI({
 });
 
 // =====================================
+// WEB PUSH
+// =====================================
+
+let pushEnabled = false;
+
+if (
+    process.env.VAPID_PUBLIC_KEY &&
+    process.env.VAPID_PRIVATE_KEY &&
+    process.env.VAPID_EMAIL
+) {
+    webpush.setVapidDetails(
+        process.env.VAPID_EMAIL,
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+    );
+
+    pushEnabled = true;
+
+    console.log("WEB PUSH = ENABLED");
+} else {
+    console.log(
+        "WEB PUSH = NOT CONFIGURED YET"
+    );
+}
+
+// Store browser subscriptions
+const subscriptions = [];
+
+// =====================================
 // FRONTEND
 // =====================================
 
-const publicFolder = path.join(__dirname, "public");
+const publicFolder =
+    path.join(__dirname, "public");
 
 if (fs.existsSync(publicFolder)) {
     app.use(express.static(publicFolder));
@@ -64,16 +92,20 @@ if (fs.existsSync(publicFolder)) {
 // =====================================
 
 app.get("/", (req, res) => {
-    const indexPath = path.join(
-        publicFolder,
-        "index.html"
-    );
+
+    const indexPath =
+        path.join(
+            publicFolder,
+            "index.html"
+        );
 
     if (fs.existsSync(indexPath)) {
         return res.sendFile(indexPath);
     }
 
-    res.send("AI Trading Server Running");
+    res.send(
+        "AI Trading Server Running"
+    );
 });
 
 // =====================================
@@ -81,47 +113,327 @@ app.get("/", (req, res) => {
 // =====================================
 
 app.get("/health", (req, res) => {
+
     res.json({
+
         success: true,
-        message: "AI Trading Server is running",
-        model: MODEL,
-        strategy: "Future Conditional Setup",
-        time: new Date().toISOString()
+
+        message:
+            "AI Trading Server is running",
+
+        strategy:
+            "4H + 1H + 30M EMA9/EMA26",
+
+        fiveMinute:
+            "DISABLED",
+
+        notification:
+            pushEnabled
+                ? "ENABLED"
+                : "NOT CONFIGURED",
+
+        time:
+            new Date().toISOString()
+
     });
+
 });
+
+// =====================================
+// VAPID PUBLIC KEY
+// =====================================
+
+app.get(
+    "/push-public-key",
+    (req, res) => {
+
+        if (!process.env.VAPID_PUBLIC_KEY) {
+
+            return res.status(500).json({
+
+                success: false,
+
+                error:
+                    "VAPID public key not configured."
+
+            });
+        }
+
+        res.json({
+
+            success: true,
+
+            publicKey:
+                process.env.VAPID_PUBLIC_KEY
+
+        });
+    }
+);
+
+// =====================================
+// SAVE PUSH SUBSCRIPTION
+// =====================================
+
+app.post(
+    "/subscribe",
+    (req, res) => {
+
+        try {
+
+            const subscription =
+                req.body;
+
+            if (
+                !subscription ||
+                !subscription.endpoint
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "Invalid push subscription."
+
+                });
+            }
+
+            const exists =
+                subscriptions.some(
+                    item =>
+                        item.endpoint ===
+                        subscription.endpoint
+                );
+
+            if (!exists) {
+
+                subscriptions.push(
+                    subscription
+                );
+
+                console.log(
+                    "NEW PUSH SUBSCRIPTION"
+                );
+
+            }
+
+            res.json({
+
+                success: true,
+
+                message:
+                    "Notification subscription saved."
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "SUBSCRIBE ERROR:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message
+
+            });
+        }
+    }
+);
+
+// =====================================
+// TEST PHONE NOTIFICATION
+// =====================================
+
+app.post(
+    "/test-notification",
+    async (req, res) => {
+
+        if (!pushEnabled) {
+
+            return res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Web Push is not configured."
+
+            });
+        }
+
+        const payload =
+            JSON.stringify({
+
+                title:
+                    "🔔 AI Trading Assistant",
+
+                body:
+                    "Test notification received.",
+
+                type:
+                    "TEST"
+
+            });
+
+        let sent = 0;
+
+        for (
+            let i = subscriptions.length - 1;
+            i >= 0;
+            i--
+        ) {
+
+            try {
+
+                await webpush.sendNotification(
+                    subscriptions[i],
+                    payload
+                );
+
+                sent++;
+
+            } catch (error) {
+
+                console.error(
+                    "PUSH ERROR:",
+                    error.message
+                );
+
+                // Remove expired subscription
+                if (
+                    error.statusCode === 404 ||
+                    error.statusCode === 410
+                ) {
+
+                    subscriptions.splice(
+                        i,
+                        1
+                    );
+                }
+            }
+        }
+
+        res.json({
+
+            success: true,
+
+            sent
+
+        });
+    }
+);
+
+// =====================================
+// SEND PUSH NOTIFICATION
+// =====================================
+
+async function sendPushNotification(
+    title,
+    body,
+    data = {}
+) {
+
+    if (!pushEnabled) {
+        return;
+    }
+
+    const payload =
+        JSON.stringify({
+
+            title,
+
+            body,
+
+            ...data
+
+        });
+
+    for (
+        let i = subscriptions.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        try {
+
+            await webpush.sendNotification(
+                subscriptions[i],
+                payload
+            );
+
+        } catch (error) {
+
+            console.error(
+                "PUSH NOTIFICATION ERROR:",
+                error.message
+            );
+
+            if (
+                error.statusCode === 404 ||
+                error.statusCode === 410
+            ) {
+
+                subscriptions.splice(
+                    i,
+                    1
+                );
+            }
+        }
+    }
+}
 
 // =====================================
 // TEST AI
 // =====================================
 
-app.get("/test-ai", async (req, res) => {
-    try {
-        const response =
-            await ai.models.generateContent({
-                model: MODEL,
-                contents:
-                    "Reply with only one word: SUCCESS"
+app.get(
+    "/test-ai",
+    async (req, res) => {
+
+        try {
+
+            const response =
+                await ai.models.generateContent({
+
+                    model: MODEL,
+
+                    contents:
+                        "Reply with only one word: SUCCESS"
+
+                });
+
+            res.json({
+
+                success: true,
+
+                reply:
+                    response.text ||
+                    "SUCCESS"
+
             });
 
-        res.json({
-            success: true,
-            reply:
-                response.text || "SUCCESS"
-        });
+        } catch (error) {
 
-    } catch (error) {
+            console.error(
+                "TEST AI ERROR:",
+                error
+            );
 
-        console.error(
-            "TEST AI ERROR:",
-            error
-        );
+            res.status(500).json({
 
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+                success: false,
+
+                error:
+                    error.message
+
+            });
+        }
     }
-});
+);
 
 // =====================================
 // IMAGE CLEANER
@@ -129,7 +441,10 @@ app.get("/test-ai", async (req, res) => {
 
 function cleanBase64(image) {
 
-    if (typeof image !== "string") {
+    if (
+        typeof image !== "string"
+    ) {
+
         return image;
     }
 
@@ -143,7 +458,10 @@ function cleanBase64(image) {
 // VALUE EXTRACTOR
 // =====================================
 
-function getValue(text, label) {
+function getValue(
+    text,
+    label
+) {
 
     const escapedLabel =
         label.replace(
@@ -171,31 +489,43 @@ function getValue(text, label) {
 // IMAGE ANALYSIS
 // =====================================
 
-app.post("/analyze", async (req, res) => {
+app.post(
+    "/analyze",
+    async (req, res) => {
 
-    try {
+        try {
 
-        const {
-            image1H,
-            image30M
-        } = req.body;
+            const {
+                image1H,
+                image30M
+            } = req.body;
 
-        if (!image1H || !image30M) {
+            if (
+                !image1H ||
+                !image30M
+            ) {
 
-            return res.status(400).json({
-                success: false,
-                error:
-                    "Please upload both 1H and 30M charts."
-            });
-        }
+                return res.status(400).json({
 
-        const chart1H =
-            cleanBase64(image1H);
+                    success: false,
 
-        const chart30M =
-            cleanBase64(image30M);
+                    error:
+                        "Please upload both 1H and 30M charts."
 
-        const prompt = `
+                });
+            }
+
+            const chart1H =
+                cleanBase64(
+                    image1H
+                );
+
+            const chart30M =
+                cleanBase64(
+                    image30M
+                );
+
+            const prompt = `
 You are a disciplined BTC/USD technical analysis assistant.
 
 The user supplied two TradingView BTC/USD charts.
@@ -212,14 +542,12 @@ Do not invent prices.
 Analyze:
 
 1H:
-- Overall trend
+- Overall direction
 - Market structure
 - Higher highs
 - Higher lows
 - Lower highs
 - Lower lows
-- Major support
-- Major resistance
 
 30M:
 - EMA9
@@ -238,16 +566,13 @@ Rules:
 
 1. Do NOT force a trade.
 2. If 1H and 30M conflict, return NO TRADE.
-3. If the setup is unclear, return NO TRADE.
+3. If setup is unclear, return NO TRADE.
 4. Do not invent prices.
-5. Do not invent support or resistance.
-6. Do not invent volume.
-7. Risk Reward must be at least 1:2.
-8. The entry must be a FUTURE TRIGGER.
-9. Do not use the current price as the future entry unless the chart clearly supports it.
-10. A BUY means price must later reach/break the entry trigger.
-11. A SELL means price must later reach/break the entry trigger.
-12. If there is no clear future trigger, return NO TRADE.
+5. Do not invent volume.
+6. Risk Reward must be at least 1:2.
+7. Entry must be a future trigger.
+8. Do not use current price as future entry unless clearly justified.
+9. If there is no clear future trigger, return NO TRADE.
 
 Return ONLY:
 
@@ -261,7 +586,6 @@ Reason: short reason
 Do NOT return:
 5M
 Confidence
-EMA values
 Support
 Resistance
 Trend
@@ -271,127 +595,131 @@ Markdown
 Tables
 `;
 
-        const response =
-            await ai.models.generateContent({
+            const response =
+                await ai.models.generateContent({
 
-                model: MODEL,
+                    model: MODEL,
 
-                contents: [
+                    contents: [
 
-                    {
-                        text:
-                            "IMAGE 1 — 1H BTC/USD CHART"
-                    },
+                        {
+                            text:
+                                "IMAGE 1 — 1H BTC/USD CHART"
+                        },
 
-                    {
-                        inlineData: {
-                            mimeType:
-                                "image/png",
-                            data:
-                                chart1H
+                        {
+                            inlineData: {
+
+                                mimeType:
+                                    "image/png",
+
+                                data:
+                                    chart1H
+
+                            }
+                        },
+
+                        {
+                            text:
+                                "IMAGE 2 — 30M BTC/USD CHART"
+                        },
+
+                        {
+                            inlineData: {
+
+                                mimeType:
+                                    "image/png",
+
+                                data:
+                                    chart30M
+
+                            }
+                        },
+
+                        {
+                            text:
+                                prompt
                         }
-                    },
 
-                    {
-                        text:
-                            "IMAGE 2 — 30M BTC/USD CHART"
-                    },
+                    ]
+                });
 
-                    {
-                        inlineData: {
-                            mimeType:
-                                "image/png",
-                            data:
-                                chart30M
-                        }
-                    },
+            const text =
+                response.text ||
+                "";
 
-                    {
-                        text:
-                            prompt
-                    }
+            console.log(
+                "AI IMAGE ANALYSIS:"
+            );
 
-                ]
+            console.log(text);
+
+            res.json({
+
+                success: true,
+
+                signal:
+                    getValue(
+                        text,
+                        "Signal"
+                    ),
+
+                entry:
+                    getValue(
+                        text,
+                        "Entry"
+                    ),
+
+                stopLoss:
+                    getValue(
+                        text,
+                        "Stop Loss"
+                    ),
+
+                target:
+                    getValue(
+                        text,
+                        "Target"
+                    ),
+
+                riskReward:
+                    getValue(
+                        text,
+                        "Risk Reward"
+                    ),
+
+                reason:
+                    getValue(
+                        text,
+                        "Reason"
+                    ),
+
+                raw:
+                    text
+
             });
 
-        const text =
-            response.text || "";
+        } catch (error) {
 
-        console.log("");
-        console.log(
-            "================================="
-        );
-        console.log(
-            "AI FUTURE SETUP IMAGE ANALYSIS"
-        );
-        console.log(
-            "================================="
-        );
-        console.log(text);
-        console.log(
-            "================================="
-        );
+            console.error(
+                "IMAGE ANALYSIS ERROR:",
+                error
+            );
 
-        res.json({
+            res.status(500).json({
 
-            success: true,
+                success: false,
 
-            signal:
-                getValue(
-                    text,
-                    "Signal"
-                ),
+                error:
+                    error.message
 
-            entry:
-                getValue(
-                    text,
-                    "Entry"
-                ),
-
-            stopLoss:
-                getValue(
-                    text,
-                    "Stop Loss"
-                ),
-
-            target:
-                getValue(
-                    text,
-                    "Target"
-                ),
-
-            riskReward:
-                getValue(
-                    text,
-                    "Risk Reward"
-                ),
-
-            reason:
-                getValue(
-                    text,
-                    "Reason"
-                ),
-
-            raw:
-                text
-        });
-
-    } catch (error) {
-
-        console.error(
-            "IMAGE ANALYSIS ERROR:",
-            error
-        );
-
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+            });
+        }
     }
-});
+);
 
 // =====================================
-// CANDLE INTERVALS
+// TIMEFRAME INTERVALS
 // =====================================
 
 const INTERVALS = {
@@ -404,13 +732,16 @@ const INTERVALS = {
 
     "4h":
         4 * 60 * 60
+
 };
 
 // =====================================
 // NORMALIZE CANDLE
 // =====================================
 
-function normalizeCandle(candle) {
+function normalizeCandle(
+    candle
+) {
 
     return {
 
@@ -428,11 +759,12 @@ function normalizeCandle(candle) {
 
         close:
             Number(candle.close)
+
     };
 }
 
 // =====================================
-// GET RECENT CANDLES
+// GET CANDLES
 // =====================================
 
 async function getRecentCandles(
@@ -441,7 +773,9 @@ async function getRecentCandles(
 ) {
 
     const interval =
-        INTERVALS[resolution];
+        INTERVALS[
+            resolution
+        ];
 
     if (!interval) {
 
@@ -490,7 +824,11 @@ async function getRecentCandles(
     const data =
         await response.json();
 
-    if (!Array.isArray(data.result)) {
+    if (
+        !Array.isArray(
+            data.result
+        )
+    ) {
 
         throw new Error(
             `${resolution}: candle data unavailable`
@@ -500,19 +838,32 @@ async function getRecentCandles(
     const candles =
         data.result
             .map(normalizeCandle)
-            .filter(candle =>
-                Number.isFinite(candle.time) &&
-                Number.isFinite(candle.open) &&
-                Number.isFinite(candle.high) &&
-                Number.isFinite(candle.low) &&
-                Number.isFinite(candle.close)
+            .filter(
+                candle =>
+                    Number.isFinite(
+                        candle.time
+                    ) &&
+                    Number.isFinite(
+                        candle.open
+                    ) &&
+                    Number.isFinite(
+                        candle.high
+                    ) &&
+                    Number.isFinite(
+                        candle.low
+                    ) &&
+                    Number.isFinite(
+                        candle.close
+                    )
             )
             .sort(
                 (a, b) =>
                     a.time - b.time
             );
 
-    for (const candle of candles) {
+    for (
+        const candle of candles
+    ) {
 
         candle.intervalSeconds =
             interval;
@@ -525,12 +876,15 @@ async function getRecentCandles(
 // LAST CLOSED CANDLE
 // =====================================
 
-function getLastClosedCandle(candles) {
+function getLastClosedCandle(
+    candles
+) {
 
     if (
         !Array.isArray(candles) ||
         candles.length === 0
     ) {
+
         return null;
     }
 
@@ -540,7 +894,8 @@ function getLastClosedCandle(candles) {
         );
 
     for (
-        let i = candles.length - 1;
+        let i =
+            candles.length - 1;
         i >= 0;
         i--
     ) {
@@ -555,8 +910,11 @@ function getLastClosedCandle(candles) {
         ) {
 
             return {
+
                 candle,
+
                 index: i
+
             };
         }
     }
@@ -577,6 +935,7 @@ function calculateEMA(
         !Array.isArray(candles) ||
         candles.length < period
     ) {
+
         return [];
     }
 
@@ -604,7 +963,8 @@ function calculateEMA(
         previous;
 
     const multiplier =
-        2 / (period + 1);
+        2 /
+        (period + 1);
 
     for (
         let i = period;
@@ -634,7 +994,7 @@ function calculateEMA(
 }
 
 // =====================================
-// CROSSOVER
+// DETECT 30M CROSSOVER
 // =====================================
 
 function detectCrossover(
@@ -647,10 +1007,12 @@ function detectCrossover(
         !Array.isArray(fastEMA) ||
         !Array.isArray(slowEMA)
     ) {
+
         return "NONE";
     }
 
     if (index < 1) {
+
         return "NONE";
     }
 
@@ -672,6 +1034,7 @@ function detectCrossover(
         currentFast === null ||
         currentSlow === null
     ) {
+
         return "NONE";
     }
 
@@ -679,6 +1042,7 @@ function detectCrossover(
         previousFast <= previousSlow &&
         currentFast > currentSlow
     ) {
+
         return "BULLISH";
     }
 
@@ -686,6 +1050,7 @@ function detectCrossover(
         previousFast >= previousSlow &&
         currentFast < currentSlow
     ) {
+
         return "BEARISH";
     }
 
@@ -705,6 +1070,7 @@ function calculateMomentum(
     if (
         index < lookback
     ) {
+
         return "NEUTRAL";
     }
 
@@ -716,11 +1082,17 @@ function calculateMomentum(
             index - lookback
         ].close;
 
-    if (current > previous) {
+    if (
+        current > previous
+    ) {
+
         return "BULLISH";
     }
 
-    if (current < previous) {
+    if (
+        current < previous
+    ) {
+
         return "BEARISH";
     }
 
@@ -731,7 +1103,9 @@ function calculateMomentum(
 // CANDLE STRUCTURE
 // =====================================
 
-function getCandleStructure(candle) {
+function getCandleStructure(
+    candle
+) {
 
     const body =
         Math.abs(
@@ -743,7 +1117,10 @@ function getCandleStructure(candle) {
         candle.high -
         candle.low;
 
-    if (range <= 0) {
+    if (
+        range <= 0
+    ) {
+
         return "NEUTRAL";
     }
 
@@ -755,6 +1132,7 @@ function getCandleStructure(candle) {
             candle.open &&
         bodyRatio >= 0.5
     ) {
+
         return "BULLISH";
     }
 
@@ -763,6 +1141,7 @@ function getCandleStructure(candle) {
             candle.open &&
         bodyRatio >= 0.5
     ) {
+
         return "BEARISH";
     }
 
@@ -803,7 +1182,9 @@ function getRecentHigh(
             );
     }
 
-    return Number.isFinite(highest)
+    return Number.isFinite(
+        highest
+    )
         ? highest
         : null;
 }
@@ -842,7 +1223,9 @@ function getRecentLow(
             );
     }
 
-    return Number.isFinite(lowest)
+    return Number.isFinite(
+        lowest
+    )
         ? lowest
         : null;
 }
@@ -859,10 +1242,7 @@ function calculateFuturePrediction(
     crossover
 ) {
 
-    // =================================
-    // BUY BIAS
-    // =================================
-
+    // BUY
     if (
         trend4h === "BULLISH" &&
         trend1h === "BULLISH" &&
@@ -872,19 +1252,18 @@ function calculateFuturePrediction(
 
         return {
 
-            signal: "BUY",
+            signal:
+                "BUY",
 
             reason:
                 crossover === "BULLISH"
-                    ? "Bullish alignment confirmed across 4H, 1H and 30M with bullish momentum and EMA crossover."
-                    : "Bullish alignment exists across 4H, 1H and 30M with bullish momentum."
+                    ? "4H and 1H are bullish and a fresh 30M bullish EMA crossover confirms the setup."
+                    : "4H, 1H and 30M are bullish, but no fresh 30M crossover is active."
+
         };
     }
 
-    // =================================
-    // SELL BIAS
-    // =================================
-
+    // SELL
     if (
         trend4h === "BEARISH" &&
         trend1h === "BEARISH" &&
@@ -894,25 +1273,25 @@ function calculateFuturePrediction(
 
         return {
 
-            signal: "SELL",
+            signal:
+                "SELL",
 
             reason:
                 crossover === "BEARISH"
-                    ? "Bearish alignment confirmed across 4H, 1H and 30M with bearish momentum and bearish EMA crossover."
-                    : "Bearish alignment exists across 4H, 1H and 30M with bearish momentum."
+                    ? "4H and 1H are bearish and a fresh 30M bearish EMA crossover confirms the setup."
+                    : "4H, 1H and 30M are bearish, but no fresh 30M crossover is active."
+
         };
     }
 
-    // =================================
-    // NO TRADE
-    // =================================
-
     return {
 
-        signal: "NO TRADE",
+        signal:
+            "NO TRADE",
 
         reason:
-            "The required 4H, 1H and 30M conditions are not aligned strongly enough for a future setup."
+            "4H, 1H and 30M conditions are not aligned."
+
     };
 }
 
@@ -930,13 +1309,19 @@ function calculateFutureSetup(
         signal !== "BUY" &&
         signal !== "SELL"
     ) {
+
         return null;
     }
 
     if (
-        !Number.isFinite(recentHigh) ||
-        !Number.isFinite(recentLow)
+        !Number.isFinite(
+            recentHigh
+        ) ||
+        !Number.isFinite(
+            recentLow
+        )
     ) {
+
         return null;
     }
 
@@ -944,7 +1329,10 @@ function calculateFutureSetup(
         recentHigh -
         recentLow;
 
-    if (range <= 0) {
+    if (
+        range <= 0
+    ) {
+
         return null;
     }
 
@@ -952,17 +1340,13 @@ function calculateFutureSetup(
     let stopLoss;
     let target;
 
-    // =================================
-    // FUTURE BUY
-    // =================================
+    if (
+        signal === "BUY"
+    ) {
 
-    if (signal === "BUY") {
-
-        // Price must break above this level.
         entry =
             recentHigh;
 
-        // Stop below recent range.
         stopLoss =
             recentLow;
 
@@ -970,7 +1354,10 @@ function calculateFutureSetup(
             entry -
             stopLoss;
 
-        if (risk <= 0) {
+        if (
+            risk <= 0
+        ) {
+
             return null;
         }
 
@@ -979,17 +1366,13 @@ function calculateFutureSetup(
             risk * 2;
     }
 
-    // =================================
-    // FUTURE SELL
-    // =================================
+    if (
+        signal === "SELL"
+    ) {
 
-    if (signal === "SELL") {
-
-        // Price must break below this level.
         entry =
             recentLow;
 
-        // Stop above recent range.
         stopLoss =
             recentHigh;
 
@@ -997,7 +1380,10 @@ function calculateFutureSetup(
             stopLoss -
             entry;
 
-        if (risk <= 0) {
+        if (
+            risk <= 0
+        ) {
+
             return null;
         }
 
@@ -1022,13 +1408,17 @@ function calculateFutureSetup(
         risk <= 0 ||
         reward <= 0
     ) {
+
         return null;
     }
 
     const rr =
         reward / risk;
 
-    if (rr < 2) {
+    if (
+        rr < 2
+    ) {
+
         return null;
     }
 
@@ -1055,7 +1445,14 @@ function calculateFutureSetup(
 }
 
 // =====================================
-// FUTURE ANALYSIS
+// CROSSOVER NOTIFICATION MEMORY
+// =====================================
+
+// Prevent duplicate notification
+let lastNotifiedCrossover = null;
+
+// =====================================
+// LIVE ANALYSIS
 // =====================================
 
 app.get(
@@ -1065,7 +1462,7 @@ app.get(
         try {
 
             // =================================
-            // MARKET DATA
+            // ONLY 4H + 1H + 30M
             // =================================
 
             const candles30m =
@@ -1087,7 +1484,7 @@ app.get(
                 );
 
             // =================================
-            // LAST CLOSED CANDLES
+            // CLOSED CANDLES
             // =================================
 
             const closed30m =
@@ -1112,7 +1509,7 @@ app.get(
             ) {
 
                 throw new Error(
-                    "Not enough closed candles available."
+                    "Not enough closed candles."
                 );
             }
 
@@ -1166,7 +1563,7 @@ app.get(
                 );
 
             // =================================
-            // TRENDS
+            // 4H TREND
             // =================================
 
             const trend4h =
@@ -1175,11 +1572,19 @@ app.get(
                     ? "BULLISH"
                     : "BEARISH";
 
+            // =================================
+            // 1H TREND
+            // =================================
+
             const trend1h =
                 ema1h9[i1] >
                 ema1h26[i1]
                     ? "BULLISH"
                     : "BEARISH";
+
+            // =================================
+            // 30M TREND
+            // =================================
 
             let ema30mTrend =
                 "SIDEWAYS";
@@ -1202,7 +1607,7 @@ app.get(
             }
 
             // =================================
-            // CROSSOVER
+            // FRESH 30M CROSSOVER
             // =================================
 
             const crossover =
@@ -1224,7 +1629,7 @@ app.get(
                 );
 
             // =================================
-            // CANDLE STRUCTURE
+            // CANDLE
             // =================================
 
             const candleStructure =
@@ -1240,7 +1645,7 @@ app.get(
                 closed30m.candle.close;
 
             // =================================
-            // FUTURE TRIGGER LEVELS
+            // RECENT LEVELS
             // =================================
 
             const recentHigh =
@@ -1274,6 +1679,38 @@ app.get(
                 prediction.signal;
 
             // =================================
+            // IMPORTANT:
+            // REQUIRE FRESH CROSSOVER
+            // =================================
+
+            if (
+                crossover !== "BULLISH" &&
+                crossover !== "BEARISH"
+            ) {
+
+                signal =
+                    "NO TRADE";
+            }
+
+            if (
+                crossover === "BULLISH" &&
+                signal !== "BUY"
+            ) {
+
+                signal =
+                    "NO TRADE";
+            }
+
+            if (
+                crossover === "BEARISH" &&
+                signal !== "SELL"
+            ) {
+
+                signal =
+                    "NO TRADE";
+            }
+
+            // =================================
             // FUTURE TRADE
             // =================================
 
@@ -1284,56 +1721,88 @@ app.get(
                     recentLow
                 );
 
-            // =================================
-            // VALIDATION
-            // =================================
-
             if (!trade) {
-                signal = "NO TRADE";
+
+                signal =
+                    "NO TRADE";
             }
 
             // =================================
-            // ALERT
+            // CROSSOVER EVENT ID
             // =================================
 
-            let alert =
-                "NONE";
+            const crossoverId =
+                `${crossover}-${closed30m.candle.time}`;
+
+            let notificationSent =
+                false;
+
+            // =================================
+            // SEND PHONE NOTIFICATION
+            // ONLY ON FRESH CROSSOVER
+            // =================================
 
             if (
-                crossover ===
-                "BULLISH"
+                pushEnabled &&
+                (
+                    crossover === "BULLISH" ||
+                    crossover === "BEARISH"
+                ) &&
+                crossoverId !==
+                    lastNotifiedCrossover
             ) {
 
-                alert =
-                    "🟢 Bullish EMA9/EMA26 crossover detected.";
-            }
+                const notificationTitle =
+                    crossover === "BULLISH"
+                        ? "🟢 BTC/USD BUY Setup"
+                        : "🔴 BTC/USD SELL Setup";
 
-            if (
-                crossover ===
-                "BEARISH"
-            ) {
+                const notificationBody =
+                    crossover === "BULLISH"
+                        ? "30M EMA9 crossed ABOVE EMA26."
+                        : "30M EMA9 crossed BELOW EMA26.";
 
-                alert =
-                    "🔴 Bearish EMA9/EMA26 crossover detected.";
-            }
+                await sendPushNotification(
 
-            // =================================
-            // FUTURE TRIGGER
-            // =================================
+                    notificationTitle,
 
-            let futureTrigger =
-                "Wait for a valid setup.";
+                    notificationBody,
 
-            if (signal === "BUY" && trade) {
+                    {
 
-                futureTrigger =
-                    `BUY only if 30M price breaks above ${trade.entry}.`;
-            }
+                        type:
+                            "CROSSOVER",
 
-            if (signal === "SELL" && trade) {
+                        signal:
+                            signal,
 
-                futureTrigger =
-                    `SELL only if 30M price breaks below ${trade.entry}.`;
+                        crossover:
+                            crossover,
+
+                        entry:
+                            trade
+                                ? trade.entry
+                                : null,
+
+                        stopLoss:
+                            trade
+                                ? trade.stopLoss
+                                : null,
+
+                        target:
+                            trade
+                                ? trade.target
+                                : null
+
+                    }
+
+                );
+
+                lastNotifiedCrossover =
+                    crossoverId;
+
+                notificationSent =
+                    true;
             }
 
             // =================================
@@ -1342,26 +1811,25 @@ app.get(
 
             res.json({
 
-                success: true,
+                success:
+                    true,
 
                 symbol:
                     SYMBOL,
 
                 mode:
-                    "FUTURE_SETUP",
+                    "4H + 1H + 30M",
 
-                signal:
-                    signal,
+                fiveMinute:
+                    "DISABLED",
+
+                signal,
 
                 prediction:
                     signal,
 
                 predictionReason:
                     prediction.reason,
-
-                // This is only the latest
-                // closed-candle reference price.
-                // It is NOT the future entry.
 
                 price:
                     Number(
@@ -1380,7 +1848,7 @@ app.get(
 
                 crossover,
 
-                alert,
+                notificationSent,
 
                 futureEntry:
                     trade
@@ -1407,7 +1875,12 @@ app.get(
                         ? trade.riskReward
                         : null,
 
-                futureTrigger,
+                futureTrigger:
+                    trade
+                        ? signal === "BUY"
+                            ? `BUY only if 30M price breaks above ${trade.entry}.`
+                            : `SELL only if 30M price breaks below ${trade.entry}.`
+                        : "NO TRADE",
 
                 support:
                     recentLow,
@@ -1423,21 +1896,24 @@ app.get(
 
                 updatedAt:
                     new Date().toISOString()
+
             });
 
         } catch (error) {
 
             console.error(
-                "FUTURE ANALYSIS ERROR:",
+                "LIVE ANALYSIS ERROR:",
                 error
             );
 
             res.status(500).json({
 
-                success: false,
+                success:
+                    false,
 
                 error:
                     error.message
+
             });
         }
     }
@@ -1483,15 +1959,23 @@ app.listen(
         );
 
         console.log(
-            "FUTURE AI  = /live-analysis"
+            "LIVE AI    = /live-analysis"
+        );
+
+        console.log(
+            "PUSH KEY   = /push-public-key"
+        );
+
+        console.log(
+            "SUBSCRIBE  = /subscribe"
+        );
+
+        console.log(
+            "TEST PUSH  = /test-notification"
         );
 
         console.log(
             "================================="
-        );
-
-        console.log(
-            "STRATEGY = FUTURE CONDITIONAL SETUP"
         );
 
         console.log(
@@ -1503,11 +1987,11 @@ app.listen(
         );
 
         console.log(
-            "MINIMUM RR = 1:2"
+            "5M = COMPLETELY DISABLED"
         );
 
         console.log(
-            "5M = DISABLED"
+            "CROSSOVER NOTIFICATION = ENABLED"
         );
 
         console.log(
@@ -1525,4 +2009,3 @@ app.listen(
         );
     }
 );
-```
