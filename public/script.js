@@ -33,6 +33,10 @@ function createLiveUI() {
                 Live BTC/USD EMA9 + EMA26 Analysis
             </p>
 
+            <!-- ========================== -->
+            <!-- BTC PRICE -->
+            <!-- ========================== -->
+
             <div class="result-card">
 
                 <h2>₿ BTC/USD</h2>
@@ -47,6 +51,10 @@ function createLiveUI() {
 
             </div>
 
+
+            <!-- ========================== -->
+            <!-- MARKET TREND -->
+            <!-- ========================== -->
 
             <div class="result-card">
 
@@ -64,12 +72,12 @@ function createLiveUI() {
                     30M Crossover: Loading...
                 </div>
 
-                <div id="confirmation">
-                    5M Confirmation: Loading...
-                </div>
-
             </div>
 
+
+            <!-- ========================== -->
+            <!-- TRADING DECISION -->
+            <!-- ========================== -->
 
             <div
                 id="liveSignal"
@@ -83,6 +91,34 @@ function createLiveUI() {
                     class="result-row"
                 >
                     Signal: Loading...
+                </div>
+
+                <div
+                    id="entry"
+                    class="result-row"
+                >
+                    Entry: -
+                </div>
+
+                <div
+                    id="stoploss"
+                    class="result-row"
+                >
+                    Stop Loss: -
+                </div>
+
+                <div
+                    id="target"
+                    class="result-row"
+                >
+                    Target: -
+                </div>
+
+                <div
+                    id="rr"
+                    class="result-row"
+                >
+                    Risk Reward: -
                 </div>
 
                 <div
@@ -106,8 +142,19 @@ function createLiveUI() {
                     Reason: -
                 </div>
 
+                <div
+                    id="futureTrigger"
+                    class="result-row"
+                >
+                    Future Trigger: -
+                </div>
+
             </div>
 
+
+            <!-- ========================== -->
+            <!-- NOTIFICATION -->
+            <!-- ========================== -->
 
             <div
                 id="notification"
@@ -118,6 +165,10 @@ function createLiveUI() {
 
             </div>
 
+
+            <!-- ========================== -->
+            <!-- REFRESH -->
+            <!-- ========================== -->
 
             <button
                 onclick="getLiveAnalysis()"
@@ -188,6 +239,7 @@ async function getLiveAnalysis() {
 
         }
 
+
         const notification =
             document.getElementById(
                 "notification"
@@ -236,14 +288,29 @@ function displayLiveAnalysis(data) {
             "crossover"
         );
 
-    const confirmation =
-        document.getElementById(
-            "confirmation"
-        );
-
     const signal =
         document.getElementById(
             "signal"
+        );
+
+    const entry =
+        document.getElementById(
+            "entry"
+        );
+
+    const stoploss =
+        document.getElementById(
+            "stoploss"
+        );
+
+    const target =
+        document.getElementById(
+            "target"
+        );
+
+    const rr =
+        document.getElementById(
+            "rr"
         );
 
     const support =
@@ -261,6 +328,11 @@ function displayLiveAnalysis(data) {
             "signalReason"
         );
 
+    const futureTrigger =
+        document.getElementById(
+            "futureTrigger"
+        );
+
 
     // ======================================
     // PRICE
@@ -270,8 +342,9 @@ function displayLiveAnalysis(data) {
 
         price.textContent =
             "Price: $" +
-            Number(data.price)
-                .toLocaleString();
+            Number(
+                data.price
+            ).toLocaleString();
 
     }
 
@@ -292,7 +365,7 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
-    // TRENDS
+    // 4H TREND
     // ======================================
 
     if (trend4h) {
@@ -304,6 +377,10 @@ function displayLiveAnalysis(data) {
     }
 
 
+    // ======================================
+    // 1H TREND
+    // ======================================
+
     if (trend1h) {
 
         trend1h.textContent =
@@ -314,7 +391,7 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
-    // CROSSOVER
+    // 30M CROSSOVER
     // ======================================
 
     if (crossover) {
@@ -327,20 +404,7 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
-    // CONFIRMATION
-    // ======================================
-
-    if (confirmation) {
-
-        confirmation.textContent =
-            "5M Confirmation: " +
-            data.confirmation;
-
-    }
-
-
-    // ======================================
-    // FINAL SIGNAL
+    // SIGNAL
     // ======================================
 
     if (signal) {
@@ -389,15 +453,88 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
+    // ENTRY
+    // ======================================
+
+    if (entry) {
+
+        entry.textContent =
+            data.entry !== null &&
+            data.entry !== undefined
+                ? "Entry: $" +
+                  Number(
+                      data.entry
+                  ).toLocaleString()
+                : "Entry: -";
+
+    }
+
+
+    // ======================================
+    // STOP LOSS
+    // ======================================
+
+    if (stoploss) {
+
+        stoploss.textContent =
+            data.stopLoss !== null &&
+            data.stopLoss !== undefined
+                ? "Stop Loss: $" +
+                  Number(
+                      data.stopLoss
+                  ).toLocaleString()
+                : "Stop Loss: -";
+
+    }
+
+
+    // ======================================
+    // TARGET
+    // ======================================
+
+    if (target) {
+
+        target.textContent =
+            data.target !== null &&
+            data.target !== undefined
+                ? "Target: $" +
+                  Number(
+                      data.target
+                  ).toLocaleString()
+                : "Target: -";
+
+    }
+
+
+    // ======================================
+    // RISK REWARD
+    // ======================================
+
+    if (rr) {
+
+        rr.textContent =
+            data.riskReward
+                ? "Risk Reward: " +
+                  data.riskReward
+                : "Risk Reward: -";
+
+    }
+
+
+    // ======================================
     // SUPPORT
     // ======================================
 
     if (support) {
 
         support.textContent =
-            "Support: $" +
-            Number(data.support)
-                .toLocaleString();
+            data.support !== null &&
+            data.support !== undefined
+                ? "Support: $" +
+                  Number(
+                      data.support
+                  ).toLocaleString()
+                : "Support: -";
 
     }
 
@@ -409,9 +546,13 @@ function displayLiveAnalysis(data) {
     if (resistance) {
 
         resistance.textContent =
-            "Resistance: $" +
-            Number(data.resistance)
-                .toLocaleString();
+            data.resistance !== null &&
+            data.resistance !== undefined
+                ? "Resistance: $" +
+                  Number(
+                      data.resistance
+                  ).toLocaleString()
+                : "Resistance: -";
 
     }
 
@@ -422,26 +563,28 @@ function displayLiveAnalysis(data) {
 
     if (reason) {
 
-        if (data.signal === "BUY") {
+        reason.textContent =
+            "Reason: " +
+            (
+                data.predictionReason ||
+                "Timeframes are not fully aligned."
+            );
 
-            reason.textContent =
-                "Reason: 4H + 1H bullish and 5M/30M EMA structure confirms BUY.";
+    }
 
-        }
 
-        else if (data.signal === "SELL") {
+    // ======================================
+    // FUTURE TRIGGER
+    // ======================================
 
-            reason.textContent =
-                "Reason: 4H + 1H bearish and 5M/30M EMA structure confirms SELL.";
+    if (futureTrigger) {
 
-        }
-
-        else {
-
-            reason.textContent =
-                "Reason: Timeframes are not fully aligned.";
-
-        }
+        futureTrigger.textContent =
+            "Future Trigger: " +
+            (
+                data.futureTrigger ||
+                "NO TRADE"
+            );
 
     }
 
@@ -660,6 +803,14 @@ console.log(
 
 console.log(
     "EMA9 + EMA26"
+);
+
+console.log(
+    "Timeframes: 4H + 1H + 30M"
+);
+
+console.log(
+    "5M: COMPLETELY DISABLED"
 );
 
 console.log(
