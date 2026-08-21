@@ -10,14 +10,6 @@ let firstLoad = true;
 
 
 // ==========================================
-// PAGE ELEMENTS
-// ==========================================
-
-const result =
-    document.getElementById("result");
-
-
-// ==========================================
 // CREATE LIVE UI
 // ==========================================
 
@@ -32,6 +24,7 @@ function createLiveUI() {
             <p class="subtitle">
                 Live BTC/USD EMA9 + EMA26 Analysis
             </p>
+
 
             <!-- ========================== -->
             <!-- BTC PRICE -->
@@ -153,17 +146,28 @@ function createLiveUI() {
 
 
             <!-- ========================== -->
-            <!-- NOTIFICATION -->
+            <!-- NOTIFICATION STATUS -->
             <!-- ========================== -->
 
             <div
                 id="notification"
                 class="result-card"
             >
-
-                🔔 Waiting for crossover...
-
+                🔔 Notification status: Checking...
             </div>
+
+
+            <!-- ========================== -->
+            <!-- ENABLE NOTIFICATIONS -->
+            <!-- ========================== -->
+
+            <button
+                id="notificationBtn"
+                onclick="enableNotifications()"
+                class="analyze-btn"
+            >
+                🔔 Enable Notifications
+            </button>
 
 
             <!-- ========================== -->
@@ -195,7 +199,10 @@ async function getLiveAnalysis() {
         const response =
             await fetch(
                 API_BASE_URL +
-                "/live-analysis"
+                "/live-analysis",
+                {
+                    cache: "no-store"
+                }
             );
 
 
@@ -372,7 +379,7 @@ function displayLiveAnalysis(data) {
 
         trend4h.textContent =
             "4H Trend: " +
-            data.trend4h;
+            (data.trend4h || "-");
 
     }
 
@@ -385,7 +392,7 @@ function displayLiveAnalysis(data) {
 
         trend1h.textContent =
             "1H Trend: " +
-            data.trend1h;
+            (data.trend1h || "-");
 
     }
 
@@ -398,7 +405,7 @@ function displayLiveAnalysis(data) {
 
         crossover.textContent =
             "30M Crossover: " +
-            data.crossover;
+            (data.crossover || "NONE");
 
     }
 
@@ -418,7 +425,7 @@ function displayLiveAnalysis(data) {
 
         signal.textContent =
             "Signal: " +
-            data.signal;
+            (data.signal || "NO TRADE");
 
 
         if (
@@ -429,9 +436,7 @@ function displayLiveAnalysis(data) {
                 "buy"
             );
 
-        }
-
-        else if (
+        } else if (
             data.signal === "SELL"
         ) {
 
@@ -439,9 +444,7 @@ function displayLiveAnalysis(data) {
                 "sell"
             );
 
-        }
-
-        else {
+        } else {
 
             signal.classList.add(
                 "no-trade"
@@ -590,7 +593,7 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
-    // CROSSOVER NOTIFICATION
+    // CROSSOVER ALERT
     // ======================================
 
     handleCrossoverNotification(
@@ -619,14 +622,14 @@ function handleCrossoverNotification(
     }
 
 
-    // --------------------------------------
+    // ======================================
     // FIRST LOAD
-    // --------------------------------------
+    // ======================================
 
     if (firstLoad) {
 
         previousCrossover =
-            crossover;
+            crossover || "NONE";
 
         firstLoad = false;
 
@@ -638,9 +641,9 @@ function handleCrossoverNotification(
     }
 
 
-    // --------------------------------------
-    // NEW BULLISH CROSSOVER
-    // --------------------------------------
+    // ======================================
+    // BULLISH
+    // ======================================
 
     if (
         crossover === "BULLISH" &&
@@ -653,15 +656,14 @@ function handleCrossoverNotification(
         notification.className =
             "result-card buy";
 
-
         playAlert();
 
     }
 
 
-    // --------------------------------------
-    // NEW BEARISH CROSSOVER
-    // --------------------------------------
+    // ======================================
+    // BEARISH
+    // ======================================
 
     else if (
         crossover === "BEARISH" &&
@@ -674,15 +676,14 @@ function handleCrossoverNotification(
         notification.className =
             "result-card sell";
 
-
         playAlert();
 
     }
 
 
-    // --------------------------------------
+    // ======================================
     // NO NEW CROSSOVER
-    // --------------------------------------
+    // ======================================
 
     else {
 
@@ -693,7 +694,7 @@ function handleCrossoverNotification(
 
 
     previousCrossover =
-        crossover;
+        crossover || "NONE";
 
 }
 
@@ -706,11 +707,18 @@ function playAlert() {
 
     try {
 
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+
+        if (!AudioContext) {
+            return;
+        }
+
+
         const audioContext =
-            new (
-                window.AudioContext ||
-                window.webkitAudioContext
-            )();
+            new AudioContext();
 
 
         const oscillator =
@@ -743,9 +751,11 @@ function playAlert() {
 
 
         setTimeout(
-            () => {
+            function () {
 
                 oscillator.stop();
+
+                audioContext.close();
 
             },
             500
@@ -759,6 +769,350 @@ function playAlert() {
         );
 
     }
+
+}
+
+
+// ==========================================
+// PUSH NOTIFICATION
+// ==========================================
+
+async function enableNotifications() {
+
+    const notification =
+        document.getElementById(
+            "notification"
+        );
+
+    const button =
+        document.getElementById(
+            "notificationBtn"
+        );
+
+
+    try {
+
+        // ==================================
+        // BROWSER SUPPORT
+        // ==================================
+
+        if (
+            !("serviceWorker" in navigator)
+        ) {
+
+            throw new Error(
+                "Service Worker is not supported."
+            );
+
+        }
+
+
+        if (
+            !("PushManager" in window)
+        ) {
+
+            throw new Error(
+                "Push notifications are not supported in this browser."
+            );
+
+        }
+
+
+        if (
+            !("Notification" in window)
+        ) {
+
+            throw new Error(
+                "Browser notifications are not supported."
+            );
+
+        }
+
+
+        // ==================================
+        // REQUEST PERMISSION
+        // ==================================
+
+        let permission =
+            Notification.permission;
+
+
+        if (
+            permission !== "granted"
+        ) {
+
+            permission =
+                await Notification.requestPermission();
+
+        }
+
+
+        if (
+            permission !== "granted"
+        ) {
+
+            throw new Error(
+                "Notification permission was not granted."
+            );
+
+        }
+
+
+        // ==================================
+        // REGISTER SERVICE WORKER
+        // ==================================
+
+        const registration =
+            await navigator.serviceWorker.register(
+                "/service-worker.js"
+            );
+
+
+        await navigator.serviceWorker.ready;
+
+
+        console.log(
+            "SERVICE WORKER REGISTERED"
+        );
+
+
+        // ==================================
+        // GET VAPID PUBLIC KEY
+        // ==================================
+
+        const keyResponse =
+            await fetch(
+                API_BASE_URL +
+                "/push-public-key",
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        const keyData =
+            await keyResponse.json();
+
+
+        if (
+            !keyResponse.ok ||
+            !keyData.success ||
+            !keyData.publicKey
+        ) {
+
+            throw new Error(
+                keyData.error ||
+                "VAPID public key unavailable."
+            );
+
+        }
+
+
+        // ==================================
+        // CONVERT PUBLIC KEY
+        // ==================================
+
+        const applicationServerKey =
+            urlBase64ToUint8Array(
+                keyData.publicKey
+            );
+
+
+        // ==================================
+        // CHECK EXISTING SUBSCRIPTION
+        // ==================================
+
+        let subscription =
+            await registration.pushManager.getSubscription();
+
+
+        // ==================================
+        // CREATE NEW SUBSCRIPTION
+        // ==================================
+
+        if (!subscription) {
+
+            subscription =
+                await registration.pushManager.subscribe({
+
+                    userVisibleOnly:
+                        true,
+
+                    applicationServerKey:
+                        applicationServerKey
+
+                });
+
+        }
+
+
+        // ==================================
+        // SEND SUBSCRIPTION TO SERVER
+        // ==================================
+
+        const subscribeResponse =
+            await fetch(
+                API_BASE_URL +
+                "/subscribe",
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify(
+                            subscription
+                        )
+
+                }
+            );
+
+
+        const subscribeData =
+            await subscribeResponse.json();
+
+
+        if (
+            !subscribeResponse.ok ||
+            !subscribeData.success
+        ) {
+
+            throw new Error(
+                subscribeData.error ||
+                "Failed to save notification subscription."
+            );
+
+        }
+
+
+        // ==================================
+        // SUCCESS
+        // ==================================
+
+        if (notification) {
+
+            notification.className =
+                "result-card buy";
+
+            notification.textContent =
+                "✅ Notifications ENABLED — Waiting for 30M EMA9/EMA26 crossover.";
+
+        }
+
+
+        if (button) {
+
+            button.textContent =
+                "✅ Notifications Enabled";
+
+            button.disabled =
+                true;
+
+        }
+
+
+        console.log(
+            "PUSH NOTIFICATION ENABLED"
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "NOTIFICATION SETUP ERROR:",
+            error
+        );
+
+
+        if (notification) {
+
+            notification.className =
+                "result-card sell";
+
+            notification.textContent =
+                "❌ Notification setup failed: " +
+                error.message;
+
+        }
+
+
+        if (button) {
+
+            button.textContent =
+                "🔔 Enable Notifications";
+
+            button.disabled =
+                false;
+
+        }
+
+    }
+
+}
+
+
+// ==========================================
+// BASE64 → UINT8ARRAY
+// ==========================================
+
+function urlBase64ToUint8Array(
+    base64String
+) {
+
+    const padding =
+        "=".repeat(
+            (4 -
+                (base64String.length % 4)) % 4
+        );
+
+
+    const base64 =
+        (
+            base64String +
+            padding
+        )
+        .replace(
+            /-/g,
+            "+"
+        )
+        .replace(
+            /_/g,
+            "/"
+        );
+
+
+    const rawData =
+        window.atob(
+            base64
+        );
+
+
+    const outputArray =
+        new Uint8Array(
+            rawData.length
+        );
+
+
+    for (
+        let i = 0;
+        i < rawData.length;
+        i++
+    ) {
+
+        outputArray[i] =
+            rawData.charCodeAt(i);
+
+    }
+
+
+    return outputArray;
 
 }
 
@@ -781,8 +1135,6 @@ getLiveAnalysis();
 // AUTO REFRESH
 // ==========================================
 
-// Refresh every 30 seconds.
-
 setInterval(
     getLiveAnalysis,
     30000
@@ -790,7 +1142,7 @@ setInterval(
 
 
 // ==========================================
-// STARTUP MESSAGE
+// STARTUP
 // ==========================================
 
 console.log(
@@ -811,6 +1163,10 @@ console.log(
 
 console.log(
     "5M: COMPLETELY DISABLED"
+);
+
+console.log(
+    "Push Notifications: ENABLED"
 );
 
 console.log(
