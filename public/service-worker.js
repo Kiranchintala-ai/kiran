@@ -1,5 +1,5 @@
 // ==========================================
-// AI TRADING ASSISTANT - SERVICE WORKER
+// AI TRADING ASSISTANT SERVICE WORKER
 // ==========================================
 
 self.addEventListener("push", function (event) {
@@ -8,28 +8,38 @@ self.addEventListener("push", function (event) {
         return;
     }
 
-    let data = {};
+    let data;
 
     try {
-        data = event.data.json();
+
+        data =
+            event.data.json();
+
     } catch (error) {
 
         data = {
-            title: "🔔 AI Trading Assistant",
-            body: event.data.text()
+
+            title:
+                "🔔 AI Trading Assistant",
+
+            body:
+                event.data.text()
+
         };
 
     }
+
 
     const title =
         data.title ||
         "🔔 AI Trading Assistant";
 
+
     const options = {
 
         body:
             data.body ||
-            "New trading alert.",
+            "New BTC/USD trading alert.",
 
         icon:
             "/icon-192.png",
@@ -38,14 +48,17 @@ self.addEventListener("push", function (event) {
             "/icon-192.png",
 
         tag:
-            data.type || "AI-TRADING",
+            data.type ||
+            "AI-TRADING",
 
         renotify:
             true,
 
-        data: data
+        data:
+            data
 
     };
+
 
     event.waitUntil(
 
@@ -69,38 +82,47 @@ self.addEventListener(
 
         event.notification.close();
 
+
         event.waitUntil(
 
             clients.matchAll({
-                type: "window",
-                includeUncontrolled: true
-            }).then(function (clientList) {
 
-                for (
-                    const client of clientList
-                ) {
+                type:
+                    "window",
 
-                    if (
-                        "focus" in client
+                includeUncontrolled:
+                    true
+
+            }).then(
+                function (clientList) {
+
+                    for (
+                        const client of clientList
                     ) {
 
-                        return client.focus();
+                        if (
+                            "focus" in client
+                        ) {
+
+                            return client.focus();
+
+                        }
+
+                    }
+
+
+                    if (
+                        clients.openWindow
+                    ) {
+
+                        return clients.openWindow(
+                            "/"
+                        );
 
                     }
 
                 }
-
-                if (
-                    clients.openWindow
-                ) {
-
-                    return clients.openWindow(
-                        "/"
-                    );
-
-                }
-
-            })
+            )
 
         );
 
