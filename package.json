@@ -1,7 +1,7 @@
 {
   "name": "ai-server",
   "version": "1.0.0",
-  "description": "AI Trading Assistant Server",
+  "description": "AI Trading Assistant",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
