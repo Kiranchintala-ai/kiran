@@ -17,8 +17,14 @@ const PORT = process.env.PORT || 3000;
 
 const MODEL = "gemini-3.6-flash";
 
-const DELTA_API =
-    "https://api.india.delta.exchange/v2/history/candles";
+const DELTA_BASE =
+    "https://api.india.delta.exchange";
+
+const DELTA_CANDLE_API =
+    `${DELTA_BASE}/v2/history/candles`;
+
+const DELTA_TICKER_API =
+    `${DELTA_BASE}/v2/tickers`;
 
 const SYMBOL = "BTCUSD";
 
@@ -39,7 +45,9 @@ app.use(
 // =====================================
 
 if (!process.env.GEMINI_API_KEY) {
-    console.error("ERROR: GEMINI_API_KEY is missing.");
+    console.error(
+        "ERROR: GEMINI_API_KEY is missing."
+    );
     process.exit(1);
 }
 
@@ -66,14 +74,15 @@ if (
 
     pushEnabled = true;
 
-    console.log("WEB PUSH = ENABLED");
+    console.log(
+        "WEB PUSH = ENABLED"
+    );
 } else {
     console.log(
         "WEB PUSH = NOT CONFIGURED YET"
     );
 }
 
-// Store browser subscriptions
 const subscriptions = [];
 
 // =====================================
@@ -84,7 +93,9 @@ const publicFolder =
     path.join(__dirname, "public");
 
 if (fs.existsSync(publicFolder)) {
-    app.use(express.static(publicFolder));
+    app.use(
+        express.static(publicFolder)
+    );
 }
 
 // =====================================
@@ -125,7 +136,10 @@ app.get("/health", (req, res) => {
             "4H + 1H + 30M EMA9/EMA26",
 
         fiveMinute:
-            "DISABLED",
+            "COMPLETELY DISABLED",
+
+        livePrice:
+            "DELTA BTCUSD TICKER",
 
         notification:
             pushEnabled
@@ -140,6 +154,170 @@ app.get("/health", (req, res) => {
 });
 
 // =====================================
+// LIVE BTC PRICE
+// =====================================
+
+async function getLiveBTCPrice() {
+
+    const url =
+        `${DELTA_TICKER_API}/${SYMBOL}`;
+
+    const response =
+        await fetch(
+            url,
+            {
+                headers: {
+                    Accept:
+                        "application/json"
+                }
+            }
+        );
+
+    if (!response.ok) {
+
+        const errorText =
+            await response.text();
+
+        throw new Error(
+            `Ticker API error ${response.status}: ${errorText}`
+        );
+    }
+
+    const data =
+        await response.json();
+
+    if (
+        !data ||
+        !data.result
+    ) {
+
+        throw new Error(
+            "Live BTC ticker unavailable."
+        );
+    }
+
+    const ticker =
+        data.result;
+
+    const livePrice =
+        Number(
+            ticker.close
+        );
+
+    const markPrice =
+        Number(
+            ticker.mark_price
+        );
+
+    const spotPrice =
+        Number(
+            ticker.spot_price
+        );
+
+    let price = livePrice;
+
+    if (
+        !Number.isFinite(price) &&
+        Number.isFinite(markPrice)
+    ) {
+        price = markPrice;
+    }
+
+    if (
+        !Number.isFinite(price) &&
+        Number.isFinite(spotPrice)
+    ) {
+        price = spotPrice;
+    }
+
+    if (
+        !Number.isFinite(price)
+    ) {
+
+        throw new Error(
+            "Invalid live BTC price."
+        );
+    }
+
+    return {
+
+        price,
+
+        markPrice:
+            Number.isFinite(markPrice)
+                ? markPrice
+                : null,
+
+        spotPrice:
+            Number.isFinite(spotPrice)
+                ? spotPrice
+                : null,
+
+        timestamp:
+            ticker.timestamp
+                ? Number(
+                    ticker.timestamp
+                )
+                : null
+
+    };
+}
+
+// =====================================
+// LIVE PRICE ENDPOINT
+// =====================================
+
+app.get(
+    "/live-price",
+    async (req, res) => {
+
+        try {
+
+            const ticker =
+                await getLiveBTCPrice();
+
+            res.json({
+
+                success: true,
+
+                symbol: SYMBOL,
+
+                price:
+                    Number(
+                        ticker.price.toFixed(2)
+                    ),
+
+                markPrice:
+                    ticker.markPrice,
+
+                spotPrice:
+                    ticker.spotPrice,
+
+                updatedAt:
+                    new Date().toISOString()
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "LIVE PRICE ERROR:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    error.message
+
+            });
+        }
+    }
+);
+
+// =====================================
 // VAPID PUBLIC KEY
 // =====================================
 
@@ -147,7 +325,9 @@ app.get(
     "/push-public-key",
     (req, res) => {
 
-        if (!process.env.VAPID_PUBLIC_KEY) {
+        if (
+            !process.env.VAPID_PUBLIC_KEY
+        ) {
 
             return res.status(500).json({
 
@@ -214,7 +394,6 @@ app.post(
                 console.log(
                     "NEW PUSH SUBSCRIPTION"
                 );
-
             }
 
             res.json({
@@ -282,7 +461,8 @@ app.post(
         let sent = 0;
 
         for (
-            let i = subscriptions.length - 1;
+            let i =
+                subscriptions.length - 1;
             i >= 0;
             i--
         ) {
@@ -303,7 +483,6 @@ app.post(
                     error.message
                 );
 
-                // Remove expired subscription
                 if (
                     error.statusCode === 404 ||
                     error.statusCode === 410
@@ -328,7 +507,7 @@ app.post(
 );
 
 // =====================================
-// SEND PUSH NOTIFICATION
+// SEND PUSH
 // =====================================
 
 async function sendPushNotification(
@@ -353,7 +532,8 @@ async function sendPushNotification(
         });
 
     for (
-        let i = subscriptions.length - 1;
+        let i =
+            subscriptions.length - 1;
         i >= 0;
         i--
     ) {
@@ -444,7 +624,6 @@ function cleanBase64(image) {
     if (
         typeof image !== "string"
     ) {
-
         return image;
     }
 
@@ -527,8 +706,6 @@ app.post(
 
             const prompt = `
 You are a disciplined BTC/USD technical analysis assistant.
-
-The user supplied two TradingView BTC/USD charts.
 
 1H = higher timeframe direction.
 30M = setup timeframe.
@@ -773,9 +950,7 @@ async function getRecentCandles(
 ) {
 
     const interval =
-        INTERVALS[
-            resolution
-        ];
+        INTERVALS[resolution];
 
     if (!interval) {
 
@@ -794,7 +969,7 @@ async function getRecentCandles(
         count * interval;
 
     const url =
-        DELTA_API +
+        DELTA_CANDLE_API +
         `?resolution=${encodeURIComponent(resolution)}` +
         `&symbol=${encodeURIComponent(SYMBOL)}` +
         `&start=${start}` +
@@ -884,7 +1059,6 @@ function getLastClosedCandle(
         !Array.isArray(candles) ||
         candles.length === 0
     ) {
-
         return null;
     }
 
@@ -935,7 +1109,6 @@ function calculateEMA(
         !Array.isArray(candles) ||
         candles.length < period
     ) {
-
         return [];
     }
 
@@ -972,12 +1145,9 @@ function calculateEMA(
         i++
     ) {
 
-        const current =
-            candles[i].close;
-
         const value =
             (
-                current -
+                candles[i].close -
                 previous
             ) *
             multiplier +
@@ -994,7 +1164,7 @@ function calculateEMA(
 }
 
 // =====================================
-// DETECT 30M CROSSOVER
+// CROSSOVER
 // =====================================
 
 function detectCrossover(
@@ -1007,12 +1177,10 @@ function detectCrossover(
         !Array.isArray(fastEMA) ||
         !Array.isArray(slowEMA)
     ) {
-
         return "NONE";
     }
 
     if (index < 1) {
-
         return "NONE";
     }
 
@@ -1034,7 +1202,6 @@ function detectCrossover(
         currentFast === null ||
         currentSlow === null
     ) {
-
         return "NONE";
     }
 
@@ -1042,7 +1209,6 @@ function detectCrossover(
         previousFast <= previousSlow &&
         currentFast > currentSlow
     ) {
-
         return "BULLISH";
     }
 
@@ -1050,7 +1216,6 @@ function detectCrossover(
         previousFast >= previousSlow &&
         currentFast < currentSlow
     ) {
-
         return "BEARISH";
     }
 
@@ -1070,7 +1235,6 @@ function calculateMomentum(
     if (
         index < lookback
     ) {
-
         return "NEUTRAL";
     }
 
@@ -1085,14 +1249,12 @@ function calculateMomentum(
     if (
         current > previous
     ) {
-
         return "BULLISH";
     }
 
     if (
         current < previous
     ) {
-
         return "BEARISH";
     }
 
@@ -1120,7 +1282,6 @@ function getCandleStructure(
     if (
         range <= 0
     ) {
-
         return "NEUTRAL";
     }
 
@@ -1132,7 +1293,6 @@ function getCandleStructure(
             candle.open &&
         bodyRatio >= 0.5
     ) {
-
         return "BULLISH";
     }
 
@@ -1141,7 +1301,6 @@ function getCandleStructure(
             candle.open &&
         bodyRatio >= 0.5
     ) {
-
         return "BEARISH";
     }
 
@@ -1242,7 +1401,6 @@ function calculateFuturePrediction(
     crossover
 ) {
 
-    // BUY
     if (
         trend4h === "BULLISH" &&
         trend1h === "BULLISH" &&
@@ -1263,7 +1421,6 @@ function calculateFuturePrediction(
         };
     }
 
-    // SELL
     if (
         trend4h === "BEARISH" &&
         trend1h === "BEARISH" &&
@@ -1309,19 +1466,13 @@ function calculateFutureSetup(
         signal !== "BUY" &&
         signal !== "SELL"
     ) {
-
         return null;
     }
 
     if (
-        !Number.isFinite(
-            recentHigh
-        ) ||
-        !Number.isFinite(
-            recentLow
-        )
+        !Number.isFinite(recentHigh) ||
+        !Number.isFinite(recentLow)
     ) {
-
         return null;
     }
 
@@ -1332,7 +1483,6 @@ function calculateFutureSetup(
     if (
         range <= 0
     ) {
-
         return null;
     }
 
@@ -1357,7 +1507,6 @@ function calculateFutureSetup(
         if (
             risk <= 0
         ) {
-
             return null;
         }
 
@@ -1366,9 +1515,7 @@ function calculateFutureSetup(
             risk * 2;
     }
 
-    if (
-        signal === "SELL"
-    ) {
+    else {
 
         entry =
             recentLow;
@@ -1383,7 +1530,6 @@ function calculateFutureSetup(
         if (
             risk <= 0
         ) {
-
             return null;
         }
 
@@ -1408,7 +1554,6 @@ function calculateFutureSetup(
         risk <= 0 ||
         reward <= 0
     ) {
-
         return null;
     }
 
@@ -1418,7 +1563,6 @@ function calculateFutureSetup(
     if (
         rr < 2
     ) {
-
         return null;
     }
 
@@ -1448,7 +1592,6 @@ function calculateFutureSetup(
 // CROSSOVER NOTIFICATION MEMORY
 // =====================================
 
-// Prevent duplicate notification
 let lastNotifiedCrossover = null;
 
 // =====================================
@@ -1482,6 +1625,13 @@ app.get(
                     "4h",
                     120
                 );
+
+            // =================================
+            // LIVE PRICE
+            // =================================
+
+            const liveTicker =
+                await getLiveBTCPrice();
 
             // =================================
             // CLOSED CANDLES
@@ -1563,7 +1713,7 @@ app.get(
                 );
 
             // =================================
-            // 4H TREND
+            // TRENDS
             // =================================
 
             const trend4h =
@@ -1572,19 +1722,11 @@ app.get(
                     ? "BULLISH"
                     : "BEARISH";
 
-            // =================================
-            // 1H TREND
-            // =================================
-
             const trend1h =
                 ema1h9[i1] >
                 ema1h26[i1]
                     ? "BULLISH"
                     : "BEARISH";
-
-            // =================================
-            // 30M TREND
-            // =================================
 
             let ema30mTrend =
                 "SIDEWAYS";
@@ -1607,7 +1749,7 @@ app.get(
             }
 
             // =================================
-            // FRESH 30M CROSSOVER
+            // FRESH CROSSOVER
             // =================================
 
             const crossover =
@@ -1638,10 +1780,10 @@ app.get(
                 );
 
             // =================================
-            // CURRENT REFERENCE PRICE
+            // STRATEGY PRICE
             // =================================
 
-            const currentPrice =
+            const strategyPrice =
                 closed30m.candle.close;
 
             // =================================
@@ -1679,7 +1821,6 @@ app.get(
                 prediction.signal;
 
             // =================================
-            // IMPORTANT:
             // REQUIRE FRESH CROSSOVER
             // =================================
 
@@ -1738,8 +1879,7 @@ app.get(
                 false;
 
             // =================================
-            // SEND PHONE NOTIFICATION
-            // ONLY ON FRESH CROSSOVER
+            // PHONE NOTIFICATION
             // =================================
 
             if (
@@ -1773,11 +1913,12 @@ app.get(
                         type:
                             "CROSSOVER",
 
-                        signal:
-                            signal,
+                        signal,
 
-                        crossover:
-                            crossover,
+                        crossover,
+
+                        livePrice:
+                            liveTicker.price,
 
                         entry:
                             trade
@@ -1795,7 +1936,6 @@ app.get(
                                 : null
 
                     }
-
                 );
 
                 lastNotifiedCrossover =
@@ -1821,7 +1961,40 @@ app.get(
                     "4H + 1H + 30M",
 
                 fiveMinute:
-                    "DISABLED",
+                    "COMPLETELY DISABLED",
+
+                // =============================
+                // LIVE PRICE
+                // =============================
+
+                price:
+                    Number(
+                        liveTicker.price.toFixed(2)
+                    ),
+
+                livePrice:
+                    Number(
+                        liveTicker.price.toFixed(2)
+                    ),
+
+                markPrice:
+                    liveTicker.markPrice,
+
+                spotPrice:
+                    liveTicker.spotPrice,
+
+                // =============================
+                // STRATEGY REFERENCE
+                // =============================
+
+                strategyPrice:
+                    Number(
+                        strategyPrice.toFixed(2)
+                    ),
+
+                // =============================
+                // SIGNAL
+                // =============================
 
                 signal,
 
@@ -1831,10 +2004,9 @@ app.get(
                 predictionReason:
                     prediction.reason,
 
-                price:
-                    Number(
-                        currentPrice.toFixed(2)
-                    ),
+                // =============================
+                // TRENDS
+                // =============================
 
                 trend4h,
 
@@ -1847,6 +2019,10 @@ app.get(
                 candleStructure,
 
                 crossover,
+
+                // =============================
+                // TRADE
+                // =============================
 
                 notificationSent,
 
@@ -1882,11 +2058,19 @@ app.get(
                             : `SELL only if 30M price breaks below ${trade.entry}.`
                         : "NO TRADE",
 
+                // =============================
+                // LEVELS
+                // =============================
+
                 support:
                     recentLow,
 
                 resistance:
                     recentHigh,
+
+                // =============================
+                // TIMES
+                // =============================
 
                 candleTime:
                     new Date(
@@ -1951,6 +2135,10 @@ app.listen(
         );
 
         console.log(
+            "LIVE PRICE = /live-price"
+        );
+
+        console.log(
             "TEST AI    = /test-ai"
         );
 
@@ -1988,6 +2176,10 @@ app.listen(
 
         console.log(
             "5M = COMPLETELY DISABLED"
+        );
+
+        console.log(
+            "LIVE PRICE = DELTA TICKER"
         );
 
         console.log(
