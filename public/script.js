@@ -1,5 +1,6 @@
 // ==========================================
 // LIVE BTC/USD AI TRADING ASSISTANT
+// PUSH NOTIFICATION + SOUND
 // ==========================================
 
 const API_BASE_URL =
@@ -7,6 +8,7 @@ const API_BASE_URL =
 
 let previousCrossover = "NONE";
 let firstLoad = true;
+let pushSetupDone = false;
 
 
 // ==========================================
@@ -25,11 +27,6 @@ function createLiveUI() {
                 Live BTC/USD EMA9 + EMA26 Analysis
             </p>
 
-
-            <!-- ========================== -->
-            <!-- BTC PRICE -->
-            <!-- ========================== -->
-
             <div class="result-card">
 
                 <h2>₿ BTC/USD</h2>
@@ -44,10 +41,6 @@ function createLiveUI() {
 
             </div>
 
-
-            <!-- ========================== -->
-            <!-- MARKET TREND -->
-            <!-- ========================== -->
 
             <div class="result-card">
 
@@ -68,114 +61,58 @@ function createLiveUI() {
             </div>
 
 
-            <!-- ========================== -->
-            <!-- TRADING DECISION -->
-            <!-- ========================== -->
-
-            <div
-                id="liveSignal"
-                class="result-card"
-            >
+            <div id="liveSignal" class="result-card">
 
                 <h2>🎯 Trading Decision</h2>
 
-                <div
-                    id="signal"
-                    class="result-row"
-                >
+                <div id="signal" class="result-row">
                     Signal: Loading...
                 </div>
 
-                <div
-                    id="entry"
-                    class="result-row"
-                >
+                <div id="entry" class="result-row">
                     Entry: -
                 </div>
 
-                <div
-                    id="stoploss"
-                    class="result-row"
-                >
+                <div id="stoploss" class="result-row">
                     Stop Loss: -
                 </div>
 
-                <div
-                    id="target"
-                    class="result-row"
-                >
+                <div id="target" class="result-row">
                     Target: -
                 </div>
 
-                <div
-                    id="rr"
-                    class="result-row"
-                >
+                <div id="rr" class="result-row">
                     Risk Reward: -
                 </div>
 
-                <div
-                    id="support"
-                    class="result-row"
-                >
+                <div id="support" class="result-row">
                     Support: -
                 </div>
 
-                <div
-                    id="resistance"
-                    class="result-row"
-                >
+                <div id="resistance" class="result-row">
                     Resistance: -
                 </div>
 
-                <div
-                    id="signalReason"
-                    class="result-row"
-                >
+                <div id="signalReason" class="result-row">
                     Reason: -
                 </div>
 
-                <div
-                    id="futureTrigger"
-                    class="result-row"
-                >
+                <div id="futureTrigger" class="result-row">
                     Future Trigger: -
                 </div>
 
             </div>
 
 
-            <!-- ========================== -->
-            <!-- NOTIFICATION STATUS -->
-            <!-- ========================== -->
+            <div id="notification" class="result-card">
 
-            <div
-                id="notification"
-                class="result-card"
-            >
-                🔔 Notification status: Checking...
+                🔔 Setting up notifications...
+
             </div>
 
 
-            <!-- ========================== -->
-            <!-- ENABLE NOTIFICATIONS -->
-            <!-- ========================== -->
-
             <button
-                id="notificationBtn"
-                onclick="enableNotifications()"
-                class="analyze-btn"
-            >
-                🔔 Enable Notifications
-            </button>
-
-
-            <!-- ========================== -->
-            <!-- REFRESH -->
-            <!-- ========================== -->
-
-            <button
-                onclick="getLiveAnalysis()"
+                id="refreshButton"
                 class="analyze-btn"
             >
                 🔄 Refresh Now
@@ -185,11 +122,346 @@ function createLiveUI() {
 
     `;
 
+    const button =
+        document.getElementById(
+            "refreshButton"
+        );
+
+    if (button) {
+
+        button.addEventListener(
+            "click",
+            getLiveAnalysis
+        );
+
+    }
+
 }
 
 
 // ==========================================
-// GET LIVE ANALYSIS
+// SETUP PUSH NOTIFICATIONS
+// ==========================================
+
+async function setupPushNotifications() {
+
+    try {
+
+        if (
+            !("serviceWorker" in navigator)
+        ) {
+
+            console.log(
+                "Service Worker not supported."
+            );
+
+            return;
+
+        }
+
+
+        if (
+            !("PushManager" in window)
+        ) {
+
+            console.log(
+                "Push notifications not supported."
+            );
+
+            return;
+
+        }
+
+
+        if (
+            !("Notification" in window)
+        ) {
+
+            console.log(
+                "Browser notifications not supported."
+            );
+
+            return;
+
+        }
+
+
+        // ----------------------------------
+        // REGISTER SERVICE WORKER
+        // ----------------------------------
+
+        const registration =
+            await navigator.serviceWorker.register(
+                "/sw.js"
+            );
+
+        console.log(
+            "SERVICE WORKER REGISTERED"
+        );
+
+
+        // ----------------------------------
+        // ASK NOTIFICATION PERMISSION
+        // ----------------------------------
+
+        let permission =
+            Notification.permission;
+
+
+        if (
+            permission === "default"
+        ) {
+
+            permission =
+                await Notification.requestPermission();
+
+        }
+
+
+        if (
+            permission !== "granted"
+        ) {
+
+            console.log(
+                "Notification permission denied."
+            );
+
+            showNotificationStatus(
+                "⚠️ Notification permission is not enabled."
+            );
+
+            return;
+
+        }
+
+
+        // ----------------------------------
+        // GET VAPID PUBLIC KEY
+        // ----------------------------------
+
+        const keyResponse =
+            await fetch(
+                API_BASE_URL +
+                "/push-public-key"
+            );
+
+
+        const keyData =
+            await keyResponse.json();
+
+
+        if (
+            !keyResponse.ok ||
+            !keyData.success ||
+            !keyData.publicKey
+        ) {
+
+            throw new Error(
+                keyData.error ||
+                "VAPID public key unavailable."
+            );
+
+        }
+
+
+        // ----------------------------------
+        // CONVERT VAPID KEY
+        // ----------------------------------
+
+        const applicationServerKey =
+            urlBase64ToUint8Array(
+                keyData.publicKey
+            );
+
+
+        // ----------------------------------
+        // GET EXISTING SUBSCRIPTION
+        // ----------------------------------
+
+        let subscription =
+            await registration.pushManager.getSubscription();
+
+
+        // ----------------------------------
+        // CREATE SUBSCRIPTION
+        // ----------------------------------
+
+        if (!subscription) {
+
+            subscription =
+                await registration.pushManager.subscribe({
+
+                    userVisibleOnly:
+                        true,
+
+                    applicationServerKey:
+                        applicationServerKey
+
+                });
+
+        }
+
+
+        // ----------------------------------
+        // SEND SUBSCRIPTION TO SERVER
+        // ----------------------------------
+
+        const subscribeResponse =
+            await fetch(
+                API_BASE_URL +
+                "/subscribe",
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify(
+                            subscription
+                        )
+
+                }
+            );
+
+
+        const subscribeData =
+            await subscribeResponse.json();
+
+
+        if (
+            !subscribeResponse.ok ||
+            !subscribeData.success
+        ) {
+
+            throw new Error(
+                subscribeData.error ||
+                "Subscription failed."
+            );
+
+        }
+
+
+        pushSetupDone = true;
+
+
+        console.log(
+            "PUSH NOTIFICATION READY"
+        );
+
+
+        showNotificationStatus(
+            "🔔 Phone notifications are ENABLED."
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "PUSH SETUP ERROR:",
+            error
+        );
+
+
+        showNotificationStatus(
+            "⚠️ Push notification setup failed."
+        );
+
+    }
+
+}
+
+
+// ==========================================
+// BASE64 → UINT8 ARRAY
+// ==========================================
+
+function urlBase64ToUint8Array(
+    base64String
+) {
+
+    const padding =
+        "=".repeat(
+            (4 - base64String.length % 4) % 4
+        );
+
+    const base64 =
+        (
+            base64String +
+            padding
+        )
+        .replace(
+            /-/g,
+            "+"
+        )
+        .replace(
+            /_/g,
+            "/"
+        );
+
+
+    const rawData =
+        window.atob(
+            base64
+        );
+
+
+    const outputArray =
+        new Uint8Array(
+            rawData.length
+        );
+
+
+    for (
+        let i = 0;
+        i < rawData.length;
+        ++i
+    ) {
+
+        outputArray[i] =
+            rawData.charCodeAt(i);
+
+    }
+
+
+    return outputArray;
+
+}
+
+
+// ==========================================
+// NOTIFICATION STATUS
+// ==========================================
+
+function showNotificationStatus(
+    message
+) {
+
+    const notification =
+        document.getElementById(
+            "notification"
+        );
+
+
+    if (!notification) {
+        return;
+    }
+
+
+    notification.textContent =
+        message;
+
+}
+
+
+// ==========================================
+// LIVE ANALYSIS
 // ==========================================
 
 async function getLiveAnalysis() {
@@ -199,10 +471,7 @@ async function getLiveAnalysis() {
         const response =
             await fetch(
                 API_BASE_URL +
-                "/live-analysis",
-                {
-                    cache: "no-store"
-                }
+                "/live-analysis"
             );
 
 
@@ -217,13 +486,15 @@ async function getLiveAnalysis() {
 
             throw new Error(
                 data.error ||
-                "Live analysis failed"
+                "Live analysis failed."
             );
 
         }
 
 
-        displayLiveAnalysis(data);
+        displayLiveAnalysis(
+            data
+        );
 
 
     } catch (error) {
@@ -239,6 +510,7 @@ async function getLiveAnalysis() {
                 "signal"
             );
 
+
         if (signal) {
 
             signal.textContent =
@@ -252,10 +524,11 @@ async function getLiveAnalysis() {
                 "notification"
             );
 
+
         if (notification) {
 
             notification.textContent =
-                "❌ Server connection failed";
+                "❌ Server connection failed.";
 
         }
 
@@ -268,7 +541,9 @@ async function getLiveAnalysis() {
 // DISPLAY LIVE DATA
 // ==========================================
 
-function displayLiveAnalysis(data) {
+function displayLiveAnalysis(
+    data
+) {
 
     const price =
         document.getElementById(
@@ -357,7 +632,7 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
-    // UPDATED TIME
+    // UPDATED
     // ======================================
 
     if (updated) {
@@ -372,40 +647,36 @@ function displayLiveAnalysis(data) {
 
 
     // ======================================
-    // 4H TREND
+    // TRENDS
     // ======================================
 
     if (trend4h) {
 
         trend4h.textContent =
             "4H Trend: " +
-            (data.trend4h || "-");
+            data.trend4h;
 
     }
 
-
-    // ======================================
-    // 1H TREND
-    // ======================================
 
     if (trend1h) {
 
         trend1h.textContent =
             "1H Trend: " +
-            (data.trend1h || "-");
+            data.trend1h;
 
     }
 
 
     // ======================================
-    // 30M CROSSOVER
+    // CROSSOVER
     // ======================================
 
     if (crossover) {
 
         crossover.textContent =
             "30M Crossover: " +
-            (data.crossover || "NONE");
+            data.crossover;
 
     }
 
@@ -425,7 +696,7 @@ function displayLiveAnalysis(data) {
 
         signal.textContent =
             "Signal: " +
-            (data.signal || "NO TRADE");
+            data.signal;
 
 
         if (
@@ -436,7 +707,9 @@ function displayLiveAnalysis(data) {
                 "buy"
             );
 
-        } else if (
+        }
+
+        else if (
             data.signal === "SELL"
         ) {
 
@@ -444,7 +717,9 @@ function displayLiveAnalysis(data) {
                 "sell"
             );
 
-        } else {
+        }
+
+        else {
 
             signal.classList.add(
                 "no-trade"
@@ -629,12 +904,15 @@ function handleCrossoverNotification(
     if (firstLoad) {
 
         previousCrossover =
-            crossover || "NONE";
+            crossover;
 
-        firstLoad = false;
+        firstLoad =
+            false;
 
         notification.textContent =
-            "🔔 Monitoring 30M EMA9 / EMA26 crossover...";
+            pushSetupDone
+                ? "🔔 Monitoring 30M EMA9 / EMA26 crossover..."
+                : "🔔 Monitoring crossover...";
 
         return;
 
@@ -656,7 +934,14 @@ function handleCrossoverNotification(
         notification.className =
             "result-card buy";
 
+
         playAlert();
+
+
+        showBrowserNotification(
+            "🟢 BTC/USD BUY ALERT",
+            "30M EMA9 crossed ABOVE EMA26!"
+        );
 
     }
 
@@ -676,7 +961,14 @@ function handleCrossoverNotification(
         notification.className =
             "result-card sell";
 
+
         playAlert();
+
+
+        showBrowserNotification(
+            "🔴 BTC/USD SELL ALERT",
+            "30M EMA9 crossed BELOW EMA26!"
+        );
 
     }
 
@@ -694,7 +986,56 @@ function handleCrossoverNotification(
 
 
     previousCrossover =
-        crossover || "NONE";
+        crossover;
+
+}
+
+
+// ==========================================
+// BROWSER NOTIFICATION
+// ==========================================
+
+function showBrowserNotification(
+    title,
+    body
+) {
+
+    if (
+        !("Notification" in window)
+    ) {
+
+        return;
+
+    }
+
+
+    if (
+        Notification.permission !==
+        "granted"
+    ) {
+
+        return;
+
+    }
+
+
+    try {
+
+        new Notification(
+            title,
+            {
+                body: body,
+                requireInteraction: true
+            }
+        );
+
+    } catch (error) {
+
+        console.log(
+            "Browser notification unavailable."
+        );
+
+    }
 
 }
 
@@ -713,7 +1054,9 @@ function playAlert() {
 
 
         if (!AudioContext) {
+
             return;
+
         }
 
 
@@ -739,12 +1082,16 @@ function playAlert() {
         );
 
 
+        oscillator.type =
+            "sine";
+
+
         oscillator.frequency.value =
-            800;
+            900;
 
 
         gain.gain.value =
-            0.15;
+            0.2;
 
 
         oscillator.start();
@@ -758,361 +1105,18 @@ function playAlert() {
                 audioContext.close();
 
             },
-            500
+            700
         );
 
 
     } catch (error) {
 
         console.log(
-            "Audio alert unavailable"
-        );
-
-    }
-
-}
-
-
-// ==========================================
-// PUSH NOTIFICATION
-// ==========================================
-
-async function enableNotifications() {
-
-    const notification =
-        document.getElementById(
-            "notification"
-        );
-
-    const button =
-        document.getElementById(
-            "notificationBtn"
-        );
-
-
-    try {
-
-        // ==================================
-        // BROWSER SUPPORT
-        // ==================================
-
-        if (
-            !("serviceWorker" in navigator)
-        ) {
-
-            throw new Error(
-                "Service Worker is not supported."
-            );
-
-        }
-
-
-        if (
-            !("PushManager" in window)
-        ) {
-
-            throw new Error(
-                "Push notifications are not supported in this browser."
-            );
-
-        }
-
-
-        if (
-            !("Notification" in window)
-        ) {
-
-            throw new Error(
-                "Browser notifications are not supported."
-            );
-
-        }
-
-
-        // ==================================
-        // REQUEST PERMISSION
-        // ==================================
-
-        let permission =
-            Notification.permission;
-
-
-        if (
-            permission !== "granted"
-        ) {
-
-            permission =
-                await Notification.requestPermission();
-
-        }
-
-
-        if (
-            permission !== "granted"
-        ) {
-
-            throw new Error(
-                "Notification permission was not granted."
-            );
-
-        }
-
-
-        // ==================================
-        // REGISTER SERVICE WORKER
-        // ==================================
-
-        const registration =
-            await navigator.serviceWorker.register(
-                "/service-worker.js"
-            );
-
-
-        await navigator.serviceWorker.ready;
-
-
-        console.log(
-            "SERVICE WORKER REGISTERED"
-        );
-
-
-        // ==================================
-        // GET VAPID PUBLIC KEY
-        // ==================================
-
-        const keyResponse =
-            await fetch(
-                API_BASE_URL +
-                "/push-public-key",
-                {
-                    cache: "no-store"
-                }
-            );
-
-
-        const keyData =
-            await keyResponse.json();
-
-
-        if (
-            !keyResponse.ok ||
-            !keyData.success ||
-            !keyData.publicKey
-        ) {
-
-            throw new Error(
-                keyData.error ||
-                "VAPID public key unavailable."
-            );
-
-        }
-
-
-        // ==================================
-        // CONVERT PUBLIC KEY
-        // ==================================
-
-        const applicationServerKey =
-            urlBase64ToUint8Array(
-                keyData.publicKey
-            );
-
-
-        // ==================================
-        // CHECK EXISTING SUBSCRIPTION
-        // ==================================
-
-        let subscription =
-            await registration.pushManager.getSubscription();
-
-
-        // ==================================
-        // CREATE NEW SUBSCRIPTION
-        // ==================================
-
-        if (!subscription) {
-
-            subscription =
-                await registration.pushManager.subscribe({
-
-                    userVisibleOnly:
-                        true,
-
-                    applicationServerKey:
-                        applicationServerKey
-
-                });
-
-        }
-
-
-        // ==================================
-        // SEND SUBSCRIPTION TO SERVER
-        // ==================================
-
-        const subscribeResponse =
-            await fetch(
-                API_BASE_URL +
-                "/subscribe",
-                {
-
-                    method:
-                        "POST",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json"
-
-                    },
-
-                    body:
-                        JSON.stringify(
-                            subscription
-                        )
-
-                }
-            );
-
-
-        const subscribeData =
-            await subscribeResponse.json();
-
-
-        if (
-            !subscribeResponse.ok ||
-            !subscribeData.success
-        ) {
-
-            throw new Error(
-                subscribeData.error ||
-                "Failed to save notification subscription."
-            );
-
-        }
-
-
-        // ==================================
-        // SUCCESS
-        // ==================================
-
-        if (notification) {
-
-            notification.className =
-                "result-card buy";
-
-            notification.textContent =
-                "✅ Notifications ENABLED — Waiting for 30M EMA9/EMA26 crossover.";
-
-        }
-
-
-        if (button) {
-
-            button.textContent =
-                "✅ Notifications Enabled";
-
-            button.disabled =
-                true;
-
-        }
-
-
-        console.log(
-            "PUSH NOTIFICATION ENABLED"
-        );
-
-
-    } catch (error) {
-
-        console.error(
-            "NOTIFICATION SETUP ERROR:",
+            "Audio alert unavailable:",
             error
         );
 
-
-        if (notification) {
-
-            notification.className =
-                "result-card sell";
-
-            notification.textContent =
-                "❌ Notification setup failed: " +
-                error.message;
-
-        }
-
-
-        if (button) {
-
-            button.textContent =
-                "🔔 Enable Notifications";
-
-            button.disabled =
-                false;
-
-        }
-
     }
-
-}
-
-
-// ==========================================
-// BASE64 → UINT8ARRAY
-// ==========================================
-
-function urlBase64ToUint8Array(
-    base64String
-) {
-
-    const padding =
-        "=".repeat(
-            (4 -
-                (base64String.length % 4)) % 4
-        );
-
-
-    const base64 =
-        (
-            base64String +
-            padding
-        )
-        .replace(
-            /-/g,
-            "+"
-        )
-        .replace(
-            /_/g,
-            "/"
-        );
-
-
-    const rawData =
-        window.atob(
-            base64
-        );
-
-
-    const outputArray =
-        new Uint8Array(
-            rawData.length
-        );
-
-
-    for (
-        let i = 0;
-        i < rawData.length;
-        i++
-    ) {
-
-        outputArray[i] =
-            rawData.charCodeAt(i);
-
-    }
-
-
-    return outputArray;
 
 }
 
@@ -1125,7 +1129,14 @@ createLiveUI();
 
 
 // ==========================================
-// FIRST REQUEST
+// START PUSH SETUP
+// ==========================================
+
+setupPushNotifications();
+
+
+// ==========================================
+// FIRST ANALYSIS
 // ==========================================
 
 getLiveAnalysis();
@@ -1142,7 +1153,7 @@ setInterval(
 
 
 // ==========================================
-// STARTUP
+// STARTUP LOG
 // ==========================================
 
 console.log(
@@ -1166,16 +1177,16 @@ console.log(
 );
 
 console.log(
-    "Push Notifications: ENABLED"
+    "Push notifications: ENABLED"
+);
+
+console.log(
+    "Auto refresh: 30 seconds"
 );
 
 console.log(
     "Backend:",
     API_BASE_URL
-);
-
-console.log(
-    "Auto refresh: 30 seconds"
 );
 
 console.log(
