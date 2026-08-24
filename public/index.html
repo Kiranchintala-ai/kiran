@@ -1,204 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Trading Assistant</title>
-
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
-
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
 <div class="container">
-
     <h1>📈 AI Trading Assistant</h1>
+    <p class="subtitle">BTC/USD Live EMA9 + EMA26 Analysis</p>
 
-    <p class="subtitle">
-        BTC/USD Live EMA9 + EMA26 Analysis
-    </p>
-
-
-    <!-- ========================= -->
     <!-- LIVE PRICE -->
-    <!-- ========================= -->
-
     <div class="result-card">
-
         <h2>💰 BTC/USD</h2>
-
-        <div
-            id="price"
-            class="result-row"
-        >
-            Price: -
-        </div>
-
-        <div
-            id="updated"
-            class="result-row"
-        >
-            Updated: -
-        </div>
-
+        <div id="livePrice" class="result-row">Price: -</div>
+        <div id="updated" class="result-row">Updated: -</div>
     </div>
 
-
-    <!-- ========================= -->
     <!-- MARKET TREND -->
-    <!-- ========================= -->
-
     <div class="result-card">
-
         <h2>📊 Market Trend</h2>
-
-        <div
-            id="trend4h"
-            class="result-row"
-        >
-            4H Trend: -
-        </div>
-
-        <div
-            id="trend1h"
-            class="result-row"
-        >
-            1H Trend: -
-        </div>
-
-        <div
-            id="trend30m"
-            class="result-row"
-        >
-            30M Trend: -
-        </div>
-
+        <div id="trend4h" class="result-row">4H Trend: -</div>
+        <div id="trend1h" class="result-row">1H Trend: -</div>
+        <div id="crossover" class="result-row">30M Crossover: -</div>
     </div>
 
-
-    <!-- ========================= -->
-    <!-- EMA CROSSOVER -->
-    <!-- ========================= -->
-
-    <div class="result-card">
-
-        <h2>📈 EMA9 / EMA26</h2>
-
-        <div
-            id="crossover"
-            class="result-row"
-        >
-            30M Crossover: -
-        </div>
-
-    </div>
-
-
-    <!-- ========================= -->
     <!-- TRADING DECISION -->
-    <!-- ========================= -->
-
-    <div
-        id="tradingDecision"
-        class="result-card"
-    >
-
+    <div id="tradingDecision" class="result-card">
         <h2>🚦 Trading Decision</h2>
-
-
-        <div
-            id="signal"
-            class="result-row"
-        >
-            Signal: -
-        </div>
-
-
-        <div
-            id="entry"
-            class="result-row"
-        >
-            Entry: -
-        </div>
-
-
-        <div
-            id="stoploss"
-            class="result-row"
-        >
-            Stop Loss: -
-        </div>
-
-
-        <div
-            id="target"
-            class="result-row"
-        >
-            Target: -
-        </div>
-
-
-        <div
-            id="rr"
-            class="result-row"
-        >
-            Risk Reward: -
-        </div>
-
+        <div id="signal" class="result-row">Signal: -</div>
+        <div id="entry" class="result-row">Entry: -</div>
+        <div id="stoploss" class="result-row">Stop Loss: -</div>
+        <div id="target" class="result-row">Target: -</div>
+        <div id="rr" class="result-row">Risk Reward: -</div>
+        <div id="support" class="result-row">Support: -</div>
+        <div id="resistance" class="result-row">Resistance: -</div>
+        <div id="signalReason" class="result-row">Reason: -</div>
+        <div id="futureTrigger" class="result-row">Future Trigger: -</div>
     </div>
 
-
-    <!-- ========================= -->
     <!-- STATUS -->
-    <!-- ========================= -->
-
-    <div
-        id="result"
-        class="status"
-    >
-        🔄 Connecting to live market...
+    <div id="notification" class="result-card">
+        🔔 Setting up notifications...
     </div>
 
-
-    <!-- ========================= -->
-    <!-- CROSSOVER NOTIFICATION -->
-    <!-- ========================= -->
-
-    <div
-        id="notification"
-        class="notification"
-        style="display:none;"
-    ></div>
-
-
-    <!-- ========================= -->
-    <!-- REFRESH -->
-    <!-- ========================= -->
-
-    <button
-        id="refreshBtn"
-        onclick="getLiveAnalysis()"
-        class="analyze-btn"
-    >
+    <!-- BUTTONS -->
+    <button id="refreshBtn" onclick="getLiveAnalysis()" class="analyze-btn">
         🔄 Refresh Analysis
     </button>
 
+    <button onclick="testPhonePush()" class="analyze-btn" style="background: #2b6cb0; margin-top: 10px;">
+        🔔 Test Push Notification
+    </button>
 </div>
 
-
 <script src="script.js"></script>
+<script>
+async function testPhonePush() {
+    try {
+        const res = await fetch("/test-notification", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            alert("✅ Test sent! Check your phone notifications.");
+        } else {
+            alert("❌ Error: " + (data.error || "Failed to send"));
+        }
+    } catch (err) {
+        alert("❌ Network Error: " + err.message);
+    }
+}
+</script>
 
 </body>
-
 </html>
