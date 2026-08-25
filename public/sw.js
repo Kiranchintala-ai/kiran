@@ -6,22 +6,29 @@ self.addEventListener("push", function (event) {
     data = event.data.json();
   } catch (error) {
     data = {
-      title: "🔔 AI Trading Assistant",
+      title: "📩 BTC/USD Signal Alert",
       body: event.data.text()
     };
   }
 
-  const title = data.title || "🔔 AI Trading Assistant";
+  const title = data.title || "📩 BTC/USD Signal Alert";
 
   const options = {
-    body: data.body || "New trading alert",
+    body: data.body || "New trade setup detected.",
     icon: "/icon.png",
     badge: "/icon.png",
     data: data,
-    tag: data.type === "CROSSOVER" ? "crossover-alert" : "general-alert",
+    tag: "btc-trading-alert",
     renotify: true,
     requireInteraction: true,
-    vibrate: [300, 100, 300, 100, 400]
+    // Triple distinct vibration pulse (mimics incoming phone message)
+    vibrate: [500, 150, 500, 150, 700],
+    // Standard system sound property
+    silent: false,
+    actions: [
+      { action: "open", title: "📈 Open App" },
+      { action: "dismiss", title: "✖ Dismiss" }
+    ]
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -30,21 +37,20 @@ self.addEventListener("push", function (event) {
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 
+  if (event.action === "dismiss") {
+    return;
+  }
+
   event.waitUntil(
-    clients
-      .matchAll({
-        type: "window",
-        includeUncontrolled: true
-      })
-      .then(function (clientList) {
-        for (const client of clientList) {
-          if ("focus" in client) {
-            return client.focus();
-          }
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (clientList) {
+      for (const client of clientList) {
+        if ("focus" in client) {
+          return client.focus();
         }
-        if (clients.openWindow) {
-          return clients.openWindow("/");
-        }
-      })
+      }
+      if (clients.openWindow) {
+        return clients.openWindow("/");
+      }
+    })
   );
 });
