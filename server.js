@@ -17,7 +17,8 @@ const DELTA_BASE = "https://api.india.delta.exchange";
 const DELTA_CANDLE_API = `${DELTA_BASE}/v2/history/candles`;
 const DELTA_TICKER_API = `${DELTA_BASE}/v2/tickers`;
 const SYMBOL = "BTCUSD";
-const MONITOR_INTERVAL_MS = 60 * 1000; // Check every 60 seconds
+const MONITOR_INTERVAL_MS = 60 * 1000;
+const SUBS_FILE = path.join(__dirname, "subscriptions.json");
 
 // =====================================
 // MIDDLEWARE
@@ -54,7 +55,27 @@ if (
   console.log("WEB PUSH = NOT CONFIGURED YET");
 }
 
-let subscriptions = [];
+function loadSubscriptions() {
+  try {
+    if (fs.existsSync(SUBS_FILE)) {
+      const data = fs.readFileSync(SUBS_FILE, "utf-8");
+      return JSON.parse(data) || [];
+    }
+  } catch (err) {
+    console.error("Error reading subscriptions.json:", err.message);
+  }
+  return [];
+}
+
+function saveSubscriptions(subs) {
+  try {
+    fs.writeFileSync(SUBS_FILE, JSON.stringify(subs, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Error saving subscriptions.json:", err.message);
+  }
+}
+
+let subscriptions = loadSubscriptions();
 const notificationHistory = [];
 const MAX_HISTORY = 50;
 
@@ -82,7 +103,6 @@ app.get("/health", (req, res) => {
     success: true,
     message: "AI Trading Server is running",
     strategy: "4H + 1H + 30M EMA9/EMA26",
-    fiveMinute: "COMPLETELY DISABLED",
     livePrice: "DELTA BTCUSD TICKER",
     notification: pushEnabled ? "ENABLED" : "NOT CONFIGURED",
     activeSubscriptions: subscriptions.length,
@@ -152,7 +172,7 @@ app.get("/live-price", async (req, res) => {
 });
 
 // =====================================
-// NOTIFICATION UTILITIES & ENDPOINTS
+// NOTIFICATION ENDPOINTS
 // =====================================
 app.get("/push-public-key", (req, res) => {
   if (!process.env.VAPID_PUBLIC_KEY) {
@@ -179,6 +199,7 @@ app.post("/subscribe", (req, res) => {
     );
     if (!exists) {
       subscriptions.push(subscription);
+      saveSubscriptions(subscriptions);
       console.log("NEW PUSH SUBSCRIPTION REGISTERED (Total:", subscriptions.length, ")");
     }
 
@@ -204,19 +225,21 @@ async function sendPushNotification(title, body, data = {}) {
   }
 
   if (!pushEnabled || subscriptions.length === 0) {
+    console.log("No active subscriptions or push not enabled.");
     return;
   }
 
   const payload = JSON.stringify({
     title,
     body,
-    icon: "/icon-192.png",
-    badge: "/badge.png",
-    vibrate: [200, 100, 200, 100, 200],
+    icon: "/icon.png",
+    badge: "/icon.png",
+    vibrate: [500, 150, 500, 150, 700],
     requireInteraction: true,
     data
   });
 
+  let changed = false;
   for (let i = subscriptions.length - 1; i >= 0; i--) {
     try {
       await webpush.sendNotification(subscriptions[i], payload);
@@ -224,8 +247,13 @@ async function sendPushNotification(title, body, data = {}) {
       console.error("PUSH NOTIFICATION ERROR:", error.message);
       if (error.statusCode === 404 || error.statusCode === 410) {
         subscriptions.splice(i, 1);
+        changed = true;
       }
     }
+  }
+
+  if (changed) {
+    saveSubscriptions(subscriptions);
   }
 }
 
@@ -236,7 +264,7 @@ app.get("/notifications/history", (req, res) => {
   });
 });
 
-app.post("/test-notification", async (req, res) => {
+async function handleTestNotification(res) {
   if (!pushEnabled) {
     return res.status(500).json({
       success: false,
@@ -255,6 +283,14 @@ app.post("/test-notification", async (req, res) => {
     message: "Test push notification sent",
     activeSubscribers: subscriptions.length
   });
+}
+
+app.post("/test-notification", async (req, res) => {
+  await handleTestNotification(res);
+});
+
+app.get("/test-notification", async (req, res) => {
+  await handleTestNotification(res);
 });
 
 // =====================================
@@ -364,7 +400,7 @@ Do NOT return: 5M, Confidence, Support, Resistance, Trend, Confirmation, Long ex
 });
 
 // =====================================
-// TECHNICAL ANALYSIS & STRATEGY UTILS
+// TECHNICAL STRATEGY UTILS
 // =====================================
 const INTERVALS = {
   "30m": 30 * 60,
@@ -594,7 +630,7 @@ function calculateFutureSetup(signal, recentHigh, recentLow) {
 }
 
 // =====================================
-// CORE STRATEGY EVALUATION FUNCTION
+// STRATEGY EVALUATION
 // =====================================
 async function evaluateStrategy() {
   const candles30m = await getRecentCandles("30m", 120);
@@ -682,7 +718,7 @@ async function evaluateStrategy() {
 }
 
 // =====================================
-// SERVER-SIDE BACKGROUND MONITOR
+// BACKGROUND MONITOR
 // =====================================
 let lastNotifiedCrossover = null;
 let monitorRunning = false;
@@ -706,8 +742,8 @@ async function runBackgroundCheck() {
 
       const notificationBody =
         data.crossover === "BULLISH"
-          ? "30M EMA9 crossed ABOVE EMA26."
-          : "30M EMA9 crossed BELOW EMA26.";
+          ? `30M EMA9 crossed ABOVE EMA26. Entry: $${data.trade ? data.trade.entry : '-'}`
+          : `30M EMA9 crossed BELOW EMA26. Entry: $${data.trade ? data.trade.entry : '-'}`;
 
       await sendPushNotification(notificationTitle, notificationBody, {
         type: "CROSSOVER",
@@ -749,8 +785,8 @@ app.get("/live-analysis", async (req, res) => {
 
       const notificationBody =
         data.crossover === "BULLISH"
-          ? "30M EMA9 crossed ABOVE EMA26."
-          : "30M EMA9 crossed BELOW EMA26.";
+          ? `30M EMA9 crossed ABOVE EMA26. Entry: $${data.trade ? data.trade.entry : '-'}`
+          : `30M EMA9 crossed BELOW EMA26. Entry: $${data.trade ? data.trade.entry : '-'}`;
 
       await sendPushNotification(notificationTitle, notificationBody, {
         type: "CROSSOVER",
@@ -770,7 +806,6 @@ app.get("/live-analysis", async (req, res) => {
       success: true,
       symbol: SYMBOL,
       mode: "4H + 1H + 30M",
-      fiveMinute: "COMPLETELY DISABLED",
       price: Number(data.liveTicker.price.toFixed(2)),
       livePrice: Number(data.liveTicker.price.toFixed(2)),
       markPrice: data.liveTicker.markPrice,
@@ -808,7 +843,7 @@ app.get("/live-analysis", async (req, res) => {
 });
 
 // =====================================
-// START SERVER & TIMER
+// START SERVER
 // =====================================
 app.listen(PORT, "0.0.0.0", () => {
   console.log("");
@@ -821,7 +856,6 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log("BACKGROUND MONITOR = EVERY 60 SECONDS");
   console.log("=================================");
 
-  // Run initial check and set background interval
   runBackgroundCheck();
   setInterval(runBackgroundCheck, MONITOR_INTERVAL_MS);
 });
