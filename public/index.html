@@ -57,21 +57,5 @@
 </div>
 
 <script src="script.js"></script>
-<script>
-async function testPhonePush() {
-    try {
-        const res = await fetch("/test-notification", { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-            alert("✅ Test sent! Check your phone notifications.");
-        } else {
-            alert("❌ Error: " + (data.error || "Failed to send"));
-        }
-    } catch (err) {
-        alert("❌ Network Error: " + err.message);
-    }
-}
-</script>
-
 </body>
 </html>
