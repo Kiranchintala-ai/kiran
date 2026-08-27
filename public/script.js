@@ -6,59 +6,7 @@
 const API_BASE_URL = window.location.origin;
 
 let previousCrossover = "NONE";
-let firstLoad = true;
 let pushSetupDone = false;
-
-// ==========================================
-// CREATE LIVE UI
-// ==========================================
-function createLiveUI() {
-  document.body.innerHTML = `
-    <div class="container">
-      <h1>📈 AI Trading Assistant</h1>
-      <p class="subtitle">Live BTC/USD EMA9 + EMA26 Analysis</p>
-
-      <div class="result-card">
-        <h2>₿ BTC/USD</h2>
-        <div id="livePrice">Price: Loading...</div>
-        <div id="updated">Updated: -</div>
-      </div>
-
-      <div class="result-card">
-        <h2>📊 Market Trend</h2>
-        <div id="trend4h">4H Trend: Loading...</div>
-        <div id="trend1h">1H Trend: Loading...</div>
-        <div id="crossover">30M Crossover: Loading...</div>
-      </div>
-
-      <div id="liveSignal" class="result-card">
-        <h2>🎯 Trading Decision</h2>
-        <div id="signal" class="result-row">Signal: Loading...</div>
-        <div id="entry" class="result-row">Entry: -</div>
-        <div id="stoploss" class="result-row">Stop Loss: -</div>
-        <div id="target" class="result-row">Target: -</div>
-        <div id="rr" class="result-row">Risk Reward: -</div>
-        <div id="support" class="result-row">Support: -</div>
-        <div id="resistance" class="result-row">Resistance: -</div>
-        <div id="signalReason" class="result-row">Reason: -</div>
-        <div id="futureTrigger" class="result-row">Future Trigger: -</div>
-      </div>
-
-      <div id="notification" class="result-card">
-        🔔 Setting up notifications...
-      </div>
-
-      <button id="refreshButton" class="analyze-btn">
-        🔄 Refresh Now
-      </button>
-    </div>
-  `;
-
-  const button = document.getElementById("refreshButton");
-  if (button) {
-    button.addEventListener("click", getLiveAnalysis);
-  }
-}
 
 // ==========================================
 // SETUP PUSH NOTIFICATIONS
@@ -79,7 +27,7 @@ async function setupPushNotifications() {
     }
 
     if (permission !== "granted") {
-      showNotificationStatus("⚠️ Notification permission is not enabled.");
+      showNotificationStatus("⚠️ Notification permission is not enabled. Tap browser lock icon to allow.");
       return;
     }
 
@@ -113,10 +61,27 @@ async function setupPushNotifications() {
 
     pushSetupDone = true;
     console.log("PUSH NOTIFICATION READY");
-    showNotificationStatus("🔔 Phone notifications are ENABLED.");
+    showNotificationStatus("🔔 Phone notifications are ENABLED & Monitoring.");
   } catch (error) {
     console.error("PUSH SETUP ERROR:", error);
-    showNotificationStatus("⚠️ Push notification setup failed.");
+    showNotificationStatus("⚠️ Push notification setup failed: " + error.message);
+  }
+}
+
+// ==========================================
+// TEST NOTIFICATION BUTTON TRIGGER
+// ==========================================
+async function testPhonePush() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/test-notification`, { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      alert("✅ Test push triggered! Check your phone tray.");
+    } else {
+      alert("❌ Error: " + (data.error || "Failed to send"));
+    }
+  } catch (err) {
+    alert("❌ Network Error: " + err.message);
   }
 }
 
@@ -160,10 +125,10 @@ async function getLiveAnalysis() {
   } catch (error) {
     console.error("LIVE ANALYSIS ERROR:", error);
     const signal = document.getElementById("signal");
-    if (signal) signal.textContent = "❌ Connection error";
+    if (signal) signal.textContent = "Signal: Connection error";
 
     const notification = document.getElementById("notification");
-    if (notification) notification.textContent = "❌ Server connection failed.";
+    if (notification) notification.textContent = "❌ Server connection failed. Retrying...";
   }
 }
 
@@ -207,7 +172,7 @@ function displayLiveAnalysis(data) {
   }
 
   if (signal) {
-    signal.classList.remove("buy", "sell", "no-trade");
+    signal.className = "result-row";
     signal.textContent = `Signal: ${data.signal}`;
 
     if (data.signal === "BUY") {
@@ -271,15 +236,6 @@ function handleCrossoverNotification(crossover) {
   const notification = document.getElementById("notification");
   if (!notification) return;
 
-  if (firstLoad) {
-    previousCrossover = crossover;
-    firstLoad = false;
-    notification.textContent = pushSetupDone
-      ? "🔔 Monitoring 30M EMA9 / EMA26 crossover..."
-      : "🔔 Monitoring crossover...";
-    return;
-  }
-
   if (crossover === "BULLISH" && previousCrossover !== "BULLISH") {
     notification.textContent = "🟢 BUY ALERT — EMA9 crossed ABOVE EMA26!";
     notification.className = "result-card buy";
@@ -288,46 +244,50 @@ function handleCrossoverNotification(crossover) {
     notification.textContent = "🔴 SELL ALERT — EMA9 crossed BELOW EMA26!";
     notification.className = "result-card sell";
     playAlert();
-  } else {
+  } else if (crossover === "NONE") {
     notification.className = "result-card";
+    notification.textContent = pushSetupDone
+      ? "🔔 Monitoring 30M EMA9 / EMA26 crossover..."
+      : "🔔 Monitoring crossover...";
   }
 
   previousCrossover = crossover;
 }
 
 // ==========================================
-// SOUND ALERT
+// SOUND ALERT (TAB OPEN)
 // ==========================================
 function playAlert() {
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
 
-    const audioContext = new AudioContext();
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.3);
 
-    oscillator.type = "sine";
-    oscillator.frequency.value = 900;
-    gain.gain.value = 0.2;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
 
-    oscillator.start();
-    setTimeout(() => {
-      oscillator.stop();
-      audioContext.close();
-    }, 700);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
   } catch (error) {
-    console.log("Audio alert unavailable:", error);
+    console.log("Foreground audio alert unavailable:", error);
   }
 }
 
 // ==========================================
 // INITIALIZE
 // ==========================================
-createLiveUI();
-setupPushNotifications();
-getLiveAnalysis();
-setInterval(getLiveAnalysis, 30000);
+window.addEventListener("DOMContentLoaded", () => {
+  setupPushNotifications();
+  getLiveAnalysis();
+  setInterval(getLiveAnalysis, 30000);
+});
