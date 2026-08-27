@@ -1,3 +1,13 @@
+// Force immediate activation on update
+self.addEventListener("install", function (event) {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", function (event) {
+  event.waitUntil(clients.claim());
+});
+
+// Push notification receiver
 self.addEventListener("push", function (event) {
   if (!event.data) return;
 
@@ -21,9 +31,7 @@ self.addEventListener("push", function (event) {
     tag: "btc-trading-alert",
     renotify: true,
     requireInteraction: true,
-    // Triple distinct vibration pulse (mimics incoming phone message)
     vibrate: [500, 150, 500, 150, 700],
-    // Standard system sound property
     silent: false,
     actions: [
       { action: "open", title: "📈 Open App" },
@@ -34,6 +42,7 @@ self.addEventListener("push", function (event) {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Click & swipe handler
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
 
