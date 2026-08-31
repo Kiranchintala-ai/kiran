@@ -3,47 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trading Assistant</title>
+    <title>AI Candlestick Trading Scanner</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="container">
-    <h1>📈 AI Trading Assistant</h1>
-    <p class="subtitle">BTC/USD Live EMA9 + EMA26 Analysis</p>
+    <h1>📈 AI Candlestick Scanner</h1>
+    <p class="subtitle">BTC/USD 15M Top 5 Candlestick Multi-Pattern Engine</p>
 
     <!-- LIVE PRICE -->
     <div class="result-card">
-        <h2>💰 BTC/USD</h2>
-        <div id="livePrice" class="result-row">Price: -</div>
+        <h2>💰 BTC/USD Live</h2>
+        <div id="livePrice" class="result-row">Price: Loading...</div>
         <div id="updated" class="result-row">Updated: -</div>
     </div>
 
-    <!-- MARKET TREND -->
+    <!-- MARKET & PATTERN SCANNER -->
     <div class="result-card">
-        <h2>📊 Market Trend</h2>
-        <div id="trend4h" class="result-row">4H Trend: -</div>
+        <h2>📊 Scanner & Trend</h2>
         <div id="trend1h" class="result-row">1H Trend: -</div>
-        <div id="crossover" class="result-row">30M Crossover: -</div>
+        <div id="activePattern" class="result-row">Detected Pattern: Scanning...</div>
     </div>
 
     <!-- TRADING DECISION -->
     <div id="tradingDecision" class="result-card">
-        <h2>🚦 Trading Decision</h2>
-        <div id="signal" class="result-row">Signal: -</div>
+        <h2>🎯 Trade Setup (1:2 R:R)</h2>
+        <div id="signal" class="result-row">Signal: Scanning...</div>
         <div id="entry" class="result-row">Entry: -</div>
         <div id="stoploss" class="result-row">Stop Loss: -</div>
         <div id="target" class="result-row">Target: -</div>
         <div id="rr" class="result-row">Risk Reward: -</div>
-        <div id="support" class="result-row">Support: -</div>
-        <div id="resistance" class="result-row">Resistance: -</div>
-        <div id="signalReason" class="result-row">Reason: -</div>
-        <div id="futureTrigger" class="result-row">Future Trigger: -</div>
+        <div id="signalReason" class="result-row">Pattern Detail: -</div>
+        <div id="futureTrigger" class="result-row">Execution Trigger: -</div>
     </div>
 
     <!-- STATUS -->
     <div id="notification" class="result-card">
-        🔔 Setting up notifications...
+        🔔 Initializing phone alerts...
     </div>
 
     <!-- BUTTONS -->
