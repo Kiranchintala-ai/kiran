@@ -17,7 +17,7 @@ async function setupPushNotifications() {
       return;
     }
 
-    const registration = await navigator.serviceWorker.register("/sw.js");
+    const registration = await navigator.serviceWorker.register("/sw.js?v=" + Date.now());
     console.log("SERVICE WORKER REGISTERED");
 
     let permission = Notification.permission;
@@ -47,7 +47,7 @@ async function setupPushNotifications() {
       });
     }
 
-    // Register with server
+    // Always ensure current subscription is active on server
     const subscribeResponse = await fetch(`${API_BASE_URL}/subscribe`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
