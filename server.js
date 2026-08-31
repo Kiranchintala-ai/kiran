@@ -80,11 +80,19 @@ const notificationHistory = [];
 const MAX_HISTORY = 50;
 
 // =====================================
-// FRONTEND STATIC FILES
+// FRONTEND STATIC FILES (ANTI-CACHE)
 // =====================================
 const publicFolder = path.join(__dirname, "public");
 if (fs.existsSync(publicFolder)) {
-  app.use(express.static(publicFolder));
+  app.use(
+    express.static(publicFolder, {
+      setHeaders: (res) => {
+        res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      }
+    })
+  );
 }
 
 // =====================================
@@ -93,6 +101,7 @@ if (fs.existsSync(publicFolder)) {
 app.get("/", (req, res) => {
   const indexPath = path.join(publicFolder, "index.html");
   if (fs.existsSync(indexPath)) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     return res.sendFile(indexPath);
   }
   res.send("AI Trading Server Running");
@@ -182,7 +191,7 @@ app.post("/subscribe", (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid push subscription." });
     }
 
-    const exists = subscriptions.some(item => item.endpoint === subscription.endpoint);
+    const exists = subscriptions.some((item) => item.endpoint === subscription.endpoint);
     if (!exists) {
       subscriptions.push(subscription);
       saveSubscriptions(subscriptions);
@@ -305,7 +314,7 @@ async function getRecentCandles(resolution, count = 120) {
 
   const candles = data.result
     .map(normalizeCandle)
-    .filter(c => Number.isFinite(c.time) && Number.isFinite(c.close))
+    .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.close))
     .sort((a, b) => a.time - b.time);
 
   for (const c of candles) c.intervalSeconds = interval;
@@ -340,14 +349,14 @@ function calculateEMA(candles, period) {
 }
 
 // =====================================
-// TOP 5 CANDLESTICK PATTERN DETECTION ENGINE
+// TOP 5 CANDLESTICK PATTERN ENGINE
 // =====================================
 function scanTop5Patterns(candles, i, ema50, trend1h) {
   if (i < 3) return null;
 
-  const c = candles[i];       // Current closed candle
-  const prev1 = candles[i - 1]; // 1 candle ago
-  const prev2 = candles[i - 2]; // 2 candles ago
+  const c = candles[i];
+  const prev1 = candles[i - 1];
+  const prev2 = candles[i - 2];
 
   const range = c.high - c.low;
   if (range <= 0) return null;
@@ -358,7 +367,7 @@ function scanTop5Patterns(candles, i, ema50, trend1h) {
   const isGreen = c.close > c.open;
   const isRed = c.close < c.open;
 
-  // 1. HAMMER / INVERTED HAMMER (Pullback & Dip Reversal)
+  // 1. HAMMER (Dip Reversal)
   if (lowerWick >= 2 * body && upperWick <= body * 0.5 && body / range <= 0.4) {
     if (trend1h === "BULLISH" || c.close >= (ema50[i] || 0)) {
       const entry = c.high;
@@ -371,12 +380,12 @@ function scanTop5Patterns(candles, i, ema50, trend1h) {
         stopLoss: Number(stopLoss.toFixed(2)),
         target: Number((entry + risk * 2).toFixed(2)),
         riskReward: "1:2.0",
-        reason: "Bullish Hammer formed at key support/pullback with strong buyer rejection."
+        reason: "Bullish Hammer formed at key support with strong buyer rejection."
       };
     }
   }
 
-  // 2. SHOOTING STAR (Top Rejection / Short)
+  // 2. SHOOTING STAR (Top Rejection)
   if (upperWick >= 2 * body && lowerWick <= body * 0.5 && body / range <= 0.4) {
     if (trend1h === "BEARISH" || c.close <= (ema50[i] || Infinity)) {
       const entry = c.low;
@@ -407,7 +416,7 @@ function scanTop5Patterns(candles, i, ema50, trend1h) {
       stopLoss: Number(stopLoss.toFixed(2)),
       target: Number((entry + risk * 2).toFixed(2)),
       riskReward: "1:2.0",
-      reason: "Bullish Engulfing candle completely engulfed prior bearish momentum."
+      reason: "Bullish Engulfing completely engulfed prior bearish momentum."
     };
   }
   if (isRed && prev1.close > prev1.open && c.close < prev1.open && c.open > prev1.close && body > prevBody) {
@@ -421,15 +430,15 @@ function scanTop5Patterns(candles, i, ema50, trend1h) {
       stopLoss: Number(stopLoss.toFixed(2)),
       target: Number((entry - risk * 2).toFixed(2)),
       riskReward: "1:2.0",
-      reason: "Bearish Engulfing candle overwhelmed buyers at the resistance area."
+      reason: "Bearish Engulfing overwhelmed buyers at the resistance area."
     };
   }
 
-  // 4. MARUBOZU BREAKOUT (High Momentum)
+  // 4. MARUBOZU BREAKOUT
   if (body / range >= 0.85) {
     if (isGreen && (trend1h === "BULLISH" || c.close > prev1.high)) {
       const entry = c.high;
-      const stopLoss = c.open + body * 0.5; // 50% midpoint
+      const stopLoss = c.open + body * 0.5;
       const risk = entry - stopLoss;
       return {
         pattern: "Bullish Marubozu Breakout",
@@ -457,7 +466,7 @@ function scanTop5Patterns(candles, i, ema50, trend1h) {
     }
   }
 
-  // 5. MORNING STAR / EVENING STAR (3-Candle Formation)
+  // 5. MORNING STAR / EVENING STAR
   const isC1Bearish = prev2.close < prev2.open;
   const isC1Bullish = prev2.close > prev2.open;
   const isC2Doji = Math.abs(prev1.close - prev1.open) / (prev1.high - prev1.low || 1) < 0.35;
@@ -519,12 +528,13 @@ async function evaluateStrategy() {
 
   const trend1h = ema1h20[i1] > ema1h50[i1] ? "BULLISH" : "BEARISH";
 
-  // Scan for any of the 5 patterns
   const detectedSetup = scanTop5Patterns(candles15m, i15, ema15m50, trend1h);
 
   const signal = detectedSetup ? detectedSetup.signal : "NO TRADE";
   const patternName = detectedSetup ? detectedSetup.pattern : "Scanning 5 Patterns...";
-  const predictionReason = detectedSetup ? detectedSetup.reason : "Waiting for Hammer, Engulfing, Marubozu or Star patterns.";
+  const predictionReason = detectedSetup
+    ? detectedSetup.reason
+    : "Waiting for Hammer, Engulfing, Marubozu or Star patterns.";
 
   return {
     liveTicker,
@@ -539,7 +549,7 @@ async function evaluateStrategy() {
 }
 
 // =====================================
-// SERVER-SIDE BACKGROUND MONITOR
+// BACKGROUND MONITOR
 // =====================================
 let lastNotifiedPattern = null;
 let monitorRunning = false;
@@ -554,9 +564,10 @@ async function runBackgroundCheck() {
       const eventId = `${data.trade.pattern}-${data.trade.signal}-${data.closed15m.candle.time}`;
 
       if (eventId !== lastNotifiedPattern) {
-        const title = data.trade.signal === "BUY"
-          ? `🟢 BTC BUY (${data.trade.pattern})`
-          : `🔴 BTC SELL (${data.trade.pattern})`;
+        const title =
+          data.trade.signal === "BUY"
+            ? `🟢 BTC BUY (${data.trade.pattern})`
+            : `🔴 BTC SELL (${data.trade.pattern})`;
 
         const body = `Entry: $${data.trade.entry} | SL: $${data.trade.stopLoss} | Target: $${data.trade.target} (1:2 R:R)`;
 
@@ -597,7 +608,7 @@ app.get("/live-analysis", async (req, res) => {
       signal: data.signal,
       pattern: data.patternName,
       trend1h: data.trend1h,
-      trend4h: data.trend1h, // Unified alignment
+      trend4h: data.trend1h,
       crossover: data.patternName,
       entry: data.trade ? data.trade.entry : null,
       stopLoss: data.trade ? data.trade.stopLoss : null,
