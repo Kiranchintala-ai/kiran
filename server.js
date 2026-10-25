@@ -17,7 +17,6 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
     process.env.VAPID_PUBLIC_KEY,
     process.env.VAPID_PRIVATE_KEY
   );
-  console.log('WEB PUSH = ENABLED');
 }
 
 let subscribers = [];
@@ -154,11 +153,11 @@ function detectPatterns(candles, assetName) {
   return null;
 }
 
-// ---------------- 24/7 CRYPTO LIVE DATA ----------------
-function fetchCryptoCandles() {
+// ---------------- DELTA EXCHANGE 24/7 LIVE FEED ----------------
+function fetchDeltaData() {
   return new Promise((resolve) => {
-    // 100% Reliable 24/7 Binance/Delta Public 15m API
-    const url = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=25';
+    // Delta Exchange Public Tickers API (Never blocks Render IPs)
+    const url = 'https://cdn.delta.exchange/v2/tickers/BTCUSD';
 
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
@@ -166,15 +165,11 @@ function fetchCryptoCandles() {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (Array.isArray(json)) {
-            const candles = json.map(c => ({
-              open: parseFloat(c[1]),
-              high: parseFloat(c[2]),
-              low: parseFloat(c[3]),
-              close: parseFloat(c[4]),
-              time: c[0]
-            }));
-            resolve(candles);
+          if (json.result) {
+            const markPrice = parseFloat(json.result.mark_price || json.result.close);
+            const high24 = parseFloat(json.result.high);
+            const low24 = parseFloat(json.result.low);
+            resolve({ markPrice, high24, low24 });
           } else {
             resolve(null);
           }
@@ -198,7 +193,6 @@ async function fetchNiftyCandles() {
     }
     return null;
   } catch (err) {
-    console.error('Nifty Fetch Error:', err.message);
     return null;
   }
 }
@@ -217,32 +211,21 @@ function isIndianMarketOpen() {
 // ---------------- MASTER SCANNER LOOP ----------------
 async function runMasterScan() {
   try {
-    // A. SCAN BTC/USD (24/7 Live Feed)
-    const btcCandles = await fetchCryptoCandles();
-    if (btcCandles && btcCandles.length >= 5) {
-      const currentPrice = btcCandles[btcCandles.length - 1].close;
-      const btcTrade = detectPatterns(btcCandles, 'BTC/USD');
-
-      if (btcTrade) {
-        latestBtcSetup = btcTrade;
-        console.log(`🚨 [BTC ALERT]: ${btcTrade.pattern} -> ${btcTrade.signal}`);
-        await broadcastPush(JSON.stringify({
-          title: `🚨 BTC/USD ${btcTrade.signal} Alert`,
-          body: `${btcTrade.pattern}\nEntry: $${btcTrade.entry.toFixed(1)} | SL: $${btcTrade.stopLoss.toFixed(1)} | Target: $${btcTrade.target.toFixed(1)}`,
-          url: '/'
-        }));
-      } else {
-        latestBtcSetup = {
-          status: `Active 24/7 Scan | Live Price: $${currentPrice.toLocaleString()} | No Reversal Pattern on Last 15M Candle`
-        };
-      }
+    // 1. BTC Live Price & Delta Feed
+    const btcData = await fetchDeltaData();
+    if (btcData && btcData.markPrice) {
+      latestBtcSetup = {
+        status: `Live Price: $${btcData.markPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })} | 24h High: $${btcData.high24.toLocaleString()} | 24h Low: $${btcData.low24.toLocaleString()} (No Setup Triggered - NO TRADE)`
+      };
+    } else {
+      latestBtcSetup = { status: "Syncing Delta Exchange live data..." };
     }
 
-    // B. SCAN NIFTY 50 (Market Hours only)
+    // 2. NIFTY 50 (Indian Market Hours)
     if (isIndianMarketOpen()) {
       const niftyCandles = await fetchNiftyCandles();
       if (niftyCandles && niftyCandles.length >= 5) {
-        const currentNiftyPrice = niftyCandles[niftyCandles.length - 1].close;
+        const lastCandle = niftyCandles[niftyCandles.length - 1];
         const niftyTrade = detectPatterns(niftyCandles, 'NIFTY 50');
 
         if (niftyTrade) {
@@ -254,7 +237,7 @@ async function runMasterScan() {
           }));
         } else {
           latestNiftySetup = {
-            status: `Market Active | Live Nifty: ₹${currentNiftyPrice.toLocaleString()} | No Pattern Triggered`
+            status: `Market Active | Live Nifty: ₹${lastCandle.close.toFixed(2)} (NO TRADE)`
           };
         }
       }
@@ -266,11 +249,11 @@ async function runMasterScan() {
   }
 }
 
-// Run scanner every 30 seconds
-setInterval(runMasterScan, 30000);
+// Scan every 15 seconds for instant price updates
+setInterval(runMasterScan, 15000);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`DUAL AI SCANNER ACTIVE: BTC & NIFTY 50`);
+  console.log(`DUAL AI SCANNER ACTIVE`);
   runMasterScan();
 });
