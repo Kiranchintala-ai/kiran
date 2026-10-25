@@ -21,7 +21,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 let subscribers = [];
-let latestBtcSetup = { status: "Scanning BTC/USD..." };
+let latestBtcSetup = { status: "Connecting to live BTC data..." };
 let latestNiftySetup = { status: "Scanning Nifty 50..." };
 
 // ---------------- SUBSCRIPTION ENDPOINTS ----------------
@@ -36,7 +36,7 @@ app.post('/subscribe', (req, res) => {
 app.get('/test-notification', async (req, res) => {
   const payload = JSON.stringify({
     title: '🔔 AI Trading Assistant Test',
-    body: 'Notification system is fully working! Signals will arrive here.',
+    body: 'Notification system is working!',
     url: '/'
   });
   await broadcastPush(payload);
@@ -63,7 +63,7 @@ async function broadcastPush(payloadString) {
   subscribers = subscribers.filter(s => !stale.includes(s));
 }
 
-// ---------------- 5 HIGH-PROBABILITY PATTERN ENGINE ----------------
+// ---------------- PATTERN ENGINE ----------------
 function detectPatterns(candles, assetName) {
   if (!candles || candles.length < 5) return null;
 
@@ -76,10 +76,8 @@ function detectPatterns(candles, assetName) {
   const upperWick = current.high - Math.max(current.open, current.close);
   const lowerWick = Math.min(current.open, current.close) - current.low;
 
-  const prevBody = Math.abs(prev.close - prev.open);
-
   // 1. Hammer (Bullish Reversal)
-  if (lowerWick >= 2 * body && upperWick <= 0.1 * range && range > 0) {
+  if (lowerWick >= 2 * body && upperWick <= 0.15 * range && range > 0) {
     const sl = current.low;
     const risk = current.close - sl;
     return {
@@ -88,12 +86,13 @@ function detectPatterns(candles, assetName) {
       signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2)
+      target: current.close + (risk * 2),
+      currentPrice: current.close
     };
   }
 
-  // 2. Shooting Star (Bearish Rejection)
-  if (upperWick >= 2 * body && lowerWick <= 0.1 * range && range > 0) {
+  // 2. Shooting Star (Bearish Reversal)
+  if (upperWick >= 2 * body && lowerWick <= 0.15 * range && range > 0) {
     const sl = current.high;
     const risk = sl - current.close;
     return {
@@ -102,7 +101,8 @@ function detectPatterns(candles, assetName) {
       signal: 'SELL',
       entry: current.close,
       stopLoss: sl,
-      target: current.close - (risk * 2)
+      target: current.close - (risk * 2),
+      currentPrice: current.close
     };
   }
 
@@ -116,7 +116,8 @@ function detectPatterns(candles, assetName) {
       signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2)
+      target: current.close + (risk * 2),
+      currentPrice: current.close
     };
   }
 
@@ -130,11 +131,12 @@ function detectPatterns(candles, assetName) {
       signal: 'SELL',
       entry: current.close,
       stopLoss: sl,
-      target: current.close - (risk * 2)
+      target: current.close - (risk * 2),
+      currentPrice: current.close
     };
   }
 
-  // 5. Morning / Evening Star (3-Candle)
+  // 5. Morning Star
   if (pprev.close < pprev.open && body > 0 && current.close > current.open && current.close > (pprev.open + pprev.close) / 2) {
     const sl = Math.min(current.low, prev.low, pprev.low);
     const risk = current.close - sl;
@@ -144,21 +146,19 @@ function detectPatterns(candles, assetName) {
       signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2)
+      target: current.close + (risk * 2),
+      currentPrice: current.close
     };
   }
 
   return null;
 }
 
-// ---------------- DATA FETCHING ----------------
-
-// 1. Fetch BTC/USD from Delta Exchange (24/7)
-function fetchDeltaCandles() {
+// ---------------- 24/7 CRYPTO LIVE DATA ----------------
+function fetchCryptoCandles() {
   return new Promise((resolve) => {
-    const endTime = Math.floor(Date.now() / 1000);
-    const startTime = endTime - (20 * 15 * 60);
-    const url = `https://api.delta.exchange/v2/history/candles?resolution=15m&symbol=BTCUSD&start=${startTime}&end=${endTime}`;
+    // 100% Reliable 24/7 Binance/Delta Public 15m API
+    const url = 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=25';
 
     https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
       let data = '';
@@ -166,14 +166,14 @@ function fetchDeltaCandles() {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (json.result && Array.isArray(json.result)) {
-            const candles = json.result.map(c => ({
-              open: parseFloat(c.open),
-              high: parseFloat(c.high),
-              low: parseFloat(c.low),
-              close: parseFloat(c.close),
-              time: c.time
-            })).reverse();
+          if (Array.isArray(json)) {
+            const candles = json.map(c => ({
+              open: parseFloat(c[1]),
+              high: parseFloat(c[2]),
+              low: parseFloat(c[3]),
+              close: parseFloat(c[4]),
+              time: c[0]
+            }));
             resolve(candles);
           } else {
             resolve(null);
@@ -186,7 +186,7 @@ function fetchDeltaCandles() {
   });
 }
 
-// 2. Fetch Nifty 50 from Yahoo Finance (^NSEI)
+// ---------------- NIFTY 50 DATA ----------------
 async function fetchNiftyCandles() {
   try {
     const result = await yahooFinance.chart('^NSEI', {
@@ -211,54 +211,66 @@ function isIndianMarketOpen() {
 
   if (day === 0 || day === 6) return false;
   const totalMins = hour * 60 + minute;
-  return totalMins >= 555 && totalMins <= 930; // 9:15 AM to 3:30 PM IST
+  return totalMins >= 555 && totalMins <= 930;
 }
 
 // ---------------- MASTER SCANNER LOOP ----------------
 async function runMasterScan() {
-  // A. SCAN BTC/USD (24/7)
-  const btcCandles = await fetchDeltaCandles();
-  if (btcCandles && btcCandles.length >= 5) {
-    const btcTrade = detectPatterns(btcCandles, 'BTC/USD');
-    if (btcTrade) {
-      latestBtcSetup = btcTrade;
-      console.log(`🚨 [BTC ALERT]: ${btcTrade.pattern} -> ${btcTrade.signal}`);
-      await broadcastPush(JSON.stringify({
-        title: `🚨 BTC/USD ${btcTrade.signal} Alert`,
-        body: `${btcTrade.pattern}\nEntry: $${btcTrade.entry.toFixed(1)} | SL: $${btcTrade.stopLoss.toFixed(1)} | Target: $${btcTrade.target.toFixed(1)}`,
-        url: '/'
-      }));
-    }
-  }
+  try {
+    // A. SCAN BTC/USD (24/7 Live Feed)
+    const btcCandles = await fetchCryptoCandles();
+    if (btcCandles && btcCandles.length >= 5) {
+      const currentPrice = btcCandles[btcCandles.length - 1].close;
+      const btcTrade = detectPatterns(btcCandles, 'BTC/USD');
 
-  // B. SCAN NIFTY 50 (Market Hours only)
-  if (isIndianMarketOpen()) {
-    const niftyCandles = await fetchNiftyCandles();
-    if (niftyCandles && niftyCandles.length >= 5) {
-      const niftyTrade = detectPatterns(niftyCandles, 'NIFTY 50');
-      if (niftyTrade) {
-        latestNiftySetup = niftyTrade;
-        console.log(`🚨 [NIFTY ALERT]: ${niftyTrade.pattern} -> ${niftyTrade.signal}`);
+      if (btcTrade) {
+        latestBtcSetup = btcTrade;
+        console.log(`🚨 [BTC ALERT]: ${btcTrade.pattern} -> ${btcTrade.signal}`);
         await broadcastPush(JSON.stringify({
-          title: `🚨 NIFTY 50 ${niftyTrade.signal} Alert`,
-          body: `${niftyTrade.pattern}\nEntry: ₹${niftyTrade.entry.toFixed(1)} | SL: ₹${niftyTrade.stopLoss.toFixed(1)} | Target: ₹${niftyTrade.target.toFixed(1)}`,
+          title: `🚨 BTC/USD ${btcTrade.signal} Alert`,
+          body: `${btcTrade.pattern}\nEntry: $${btcTrade.entry.toFixed(1)} | SL: $${btcTrade.stopLoss.toFixed(1)} | Target: $${btcTrade.target.toFixed(1)}`,
           url: '/'
         }));
+      } else {
+        latestBtcSetup = {
+          status: `Active 24/7 Scan | Live Price: $${currentPrice.toLocaleString()} | No Reversal Pattern on Last 15M Candle`
+        };
       }
     }
-  } else {
-    latestNiftySetup = { status: "Market Closed (Opens 9:15 AM Mon-Fri)" };
+
+    // B. SCAN NIFTY 50 (Market Hours only)
+    if (isIndianMarketOpen()) {
+      const niftyCandles = await fetchNiftyCandles();
+      if (niftyCandles && niftyCandles.length >= 5) {
+        const currentNiftyPrice = niftyCandles[niftyCandles.length - 1].close;
+        const niftyTrade = detectPatterns(niftyCandles, 'NIFTY 50');
+
+        if (niftyTrade) {
+          latestNiftySetup = niftyTrade;
+          await broadcastPush(JSON.stringify({
+            title: `🚨 NIFTY 50 ${niftyTrade.signal} Alert`,
+            body: `${niftyTrade.pattern}\nEntry: ₹${niftyTrade.entry.toFixed(1)} | SL: ₹${niftyTrade.stopLoss.toFixed(1)} | Target: ₹${niftyTrade.target.toFixed(1)}`,
+            url: '/'
+          }));
+        } else {
+          latestNiftySetup = {
+            status: `Market Active | Live Nifty: ₹${currentNiftyPrice.toLocaleString()} | No Pattern Triggered`
+          };
+        }
+      }
+    } else {
+      latestNiftySetup = { status: "Market Closed (Opens 9:15 AM Mon-Fri)" };
+    }
+  } catch (e) {
+    console.error('Scan Error:', e.message);
   }
 }
 
-// Run scanner every 60 seconds
-setInterval(runMasterScan, 60000);
+// Run scanner every 30 seconds
+setInterval(runMasterScan, 30000);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`=================================`);
   console.log(`DUAL AI SCANNER ACTIVE: BTC & NIFTY 50`);
-  console.log(`PORT = ${PORT}`);
-  console.log(`=================================`);
   runMasterScan();
 });
