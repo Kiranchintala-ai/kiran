@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Dual Trading Assistant</title>
+  <title>AI Trading Assistant</title>
   <style>
     body {
       background-color: #0b0e14;
@@ -83,18 +83,9 @@
     <div class="card">
       <div class="card-header">
         <span class="asset-title">🪙 BTC/USD (24/7)</span>
-        <span id="btc-badge" class="badge badge-neutral">Scanning</span>
+        <span id="btc-badge" class="badge badge-neutral">WAITING</span>
       </div>
-      <div id="btc-content" class="details">Checking recent 15M candles...</div>
-    </div>
-
-    <!-- NIFTY 50 Card -->
-    <div class="card">
-      <div class="card-header">
-        <span class="asset-title">🇮🇳 NIFTY 50 (NSE)</span>
-        <span id="nifty-badge" class="badge badge-neutral">Scanning</span>
-      </div>
-      <div id="nifty-content" class="details">Checking Indian market data...</div>
+      <div id="btc-content" class="details">Scanning recent 15M candles...</div>
     </div>
 
     <!-- Actions -->
@@ -111,21 +102,18 @@
         if (!res.ok) throw new Error("HTTP error " + res.status);
         const data = await res.json();
 
-        // Render BTC
-        renderAsset('btc', data.btc);
-        // Render Nifty
-        renderAsset('nifty', data.nifty);
+        renderAsset(data.btc);
 
         document.getElementById('status-footer').innerText = 
           `Subscribers: ${data.subscribers} | Auto-updated: ${new Date().toLocaleTimeString()}`;
       } catch (err) {
-        document.getElementById('status-footer').innerText = "Syncing with engine... (Wait a moment)";
+        document.getElementById('status-footer').innerText = "Syncing with engine...";
       }
     }
 
-    function renderAsset(prefix, setup) {
-      const badge = document.getElementById(`${prefix}-badge`);
-      const content = document.getElementById(`${prefix}-content`);
+    function renderAsset(setup) {
+      const badge = document.getElementById('btc-badge');
+      const content = document.getElementById('btc-content');
 
       if (!setup || setup.status) {
         badge.className = "badge badge-neutral";
@@ -140,17 +128,16 @@
 
       content.innerHTML = `
         <div><strong>Pattern:</strong> ${setup.pattern}</div>
-        <div><strong>Entry:</strong> ${setup.entry}</div>
-        <div><strong>Stop Loss:</strong> ${setup.stopLoss}</div>
-        <div><strong>Target:</strong> ${setup.target} (1:2 R:R)</div>
+        <div><strong>Entry:</strong> $${setup.entry.toFixed(2)}</div>
+        <div><strong>Stop Loss:</strong> $${setup.stopLoss.toFixed(2)}</div>
+        <div><strong>Target:</strong> $${setup.target.toFixed(2)} (1:2 R:R)</div>
       `;
     }
 
-    async function triggerTestPush() {
+    function triggerTestPush() {
       window.location.href = '/test-notification';
     }
 
-    // Auto fetch on load and every 15s
     fetchSignals();
     setInterval(fetchSignals, 15000);
   </script>
