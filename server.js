@@ -3,26 +3,37 @@ const express = require('express');
 const cors = require('cors');
 const webpush = require('web-push');
 const https = require('https');
+const { GoogleGenAI } = require('@google/genai');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Configure Web Push Keys
+// Configure Web Push
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
     process.env.VAPID_EMAIL || 'mailto:tradingalert@gmail.com',
     process.env.VAPID_PUBLIC_KEY,
     process.env.VAPID_PRIVATE_KEY
   );
-  console.log('WEB PUSH = ENABLED');
 }
 
-let subscribers = [];
-let latestBtcSetup = { status: "Syncing live BTC data..." };
+// Configure Gemini AI (optional enhancement if GEMINI_API_KEY is set in Render)
+const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 
-// ---------------- SUBSCRIPTION ENDPOINTS ----------------
+let subscribers = [];
+let latestState = {
+  livePrice: null,
+  setup: 'NO TRADE',
+  pattern: 'None',
+  entry: null,
+  stopLoss: null,
+  target: null,
+  why: 'Syncing live BTC/USD 15M candles...'
+};
+
+// ---------------- ENDPOINTS ----------------
 app.post('/subscribe', (req, res) => {
   const subscription = req.body;
   if (!subscribers.some(s => s.endpoint === subscription.endpoint)) {
@@ -32,18 +43,17 @@ app.post('/subscribe', (req, res) => {
 });
 
 app.get('/test-notification', async (req, res) => {
-  const payload = JSON.stringify({
-    title: '🔔 AI Trading Assistant Test',
-    body: 'Notification system is working! BTC signals will arrive here.',
+  await broadcastPush(JSON.stringify({
+    title: '🔔 BTC/USD AI Alert Test',
+    body: 'Notifications are active!',
     url: '/'
-  });
-  await broadcastPush(payload);
-  res.json({ success: true, message: 'Test push notification sent', activeSubscribers: subscribers.length });
+  }));
+  res.json({ success: true, activeSubscribers: subscribers.length });
 });
 
 app.get('/api/signals', (req, res) => {
   res.json({
-    btc: latestBtcSetup,
+    ...latestState,
     subscribers: subscribers.length
   });
 });
@@ -60,10 +70,8 @@ async function broadcastPush(payloadString) {
   subscribers = subscribers.filter(s => !stale.includes(s));
 }
 
-// ---------------- 5 HIGH-PROBABILITY PATTERNS ENGINE ----------------
-function detectPatterns(candles) {
-  if (!candles || candles.length < 5) return null;
-
+// ---------------- 5-PATTERN DETECTOR ----------------
+function analyzeCandles(candles, livePrice) {
   const current = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
   const pprev = candles[candles.length - 3];
@@ -73,31 +81,31 @@ function detectPatterns(candles) {
   const upperWick = current.high - Math.max(current.open, current.close);
   const lowerWick = Math.min(current.open, current.close) - current.low;
 
-  // 1. Hammer (Bullish Reversal)
+  // 1. Hammer (Bullish)
   if (lowerWick >= 2 * body && upperWick <= 0.15 * range && range > 0) {
     const sl = current.low;
     const risk = current.close - sl;
     return {
-      asset: 'BTC/USD',
-      pattern: 'Hammer (Rejection of Lows)',
-      signal: 'BUY',
+      setup: 'BUY',
+      pattern: 'Hammer',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2)
+      target: current.close + (risk * 2),
+      why: `Completed 15M candle formed a Bullish Hammer with a long lower wick ($${sl.toFixed(2)}), showing strong buyer rejection of lower prices.`
     };
   }
 
-  // 2. Shooting Star (Bearish Rejection)
+  // 2. Shooting Star (Bearish)
   if (upperWick >= 2 * body && lowerWick <= 0.15 * range && range > 0) {
     const sl = current.high;
     const risk = sl - current.close;
     return {
-      asset: 'BTC/USD',
-      pattern: 'Shooting Star (Top Rejection)',
-      signal: 'SELL',
+      setup: 'SELL',
+      pattern: 'Shooting Star',
       entry: current.close,
       stopLoss: sl,
-      target: current.close - (risk * 2)
+      target: current.close - (risk * 2),
+      why: `Completed 15M candle formed a Bearish Shooting Star with a long upper wick ($${sl.toFixed(2)}), showing heavy seller rejection at the highs.`
     };
   }
 
@@ -106,12 +114,12 @@ function detectPatterns(candles) {
     const sl = Math.min(current.low, prev.low);
     const risk = current.close - sl;
     return {
-      asset: 'BTC/USD',
+      setup: 'BUY',
       pattern: 'Bullish Engulfing',
-      signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2)
+      target: current.close + (risk * 2),
+      why: `Green 15M candle completely engulfed the prior red candle, signaling an immediate shift in momentum toward buyers.`
     };
   }
 
@@ -120,12 +128,12 @@ function detectPatterns(candles) {
     const sl = Math.max(current.high, prev.high);
     const risk = sl - current.close;
     return {
-      asset: 'BTC/USD',
+      setup: 'SELL',
       pattern: 'Bearish Engulfing',
-      signal: 'SELL',
       entry: current.close,
       stopLoss: sl,
-      target: current.close - (risk * 2)
+      target: current.close - (risk * 2),
+      why: `Red 15M candle completely engulfed the prior green candle, confirming strong selling pressure.`
     };
   }
 
@@ -134,19 +142,43 @@ function detectPatterns(candles) {
     const sl = Math.min(current.low, prev.low, pprev.low);
     const risk = current.close - sl;
     return {
-      asset: 'BTC/USD',
-      pattern: 'Morning Star Pattern',
-      signal: 'BUY',
+      setup: 'BUY',
+      pattern: 'Morning Star',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2)
+      target: current.close + (risk * 2),
+      why: `3-candle Morning Star reversal confirmed on the 15M timeframe as buyers reclaimed more than 50% of the prior drop.`
     };
   }
 
-  return null;
+  // No Pattern Found
+  const trend = current.close >= current.open ? 'mild bullish' : 'mild bearish';
+  return {
+    setup: 'NO TRADE',
+    pattern: 'None',
+    entry: null,
+    stopLoss: null,
+    target: null,
+    why: `Last completed 15M candle closed at $${current.close.toFixed(2)} (${trend} body), but none of the 5 high-probability reversal patterns formed. Waiting for clean confirmation to protect capital.`
+  };
 }
 
-// ---------------- 24/7 BTC LIVE FEED (15M OHLC CANDLES) ----------------
+// Optional Gemini AI Explanation Refinement
+async function refineWhyWithAI(analysis, livePrice) {
+  if (!ai) return analysis.why;
+  try {
+    const prompt = `BTC/USD Live Price: $${livePrice}. Status: ${analysis.setup} (${analysis.pattern}). Technical note: ${analysis.why}. Write a crisp 1-2 sentence trader explanation for "Why" this is the setup right now.`;
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt
+    });
+    return response.text.trim() || analysis.why;
+  } catch {
+    return analysis.why;
+  }
+}
+
+// ---------------- 24/7 LIVE FEED ----------------
 function fetchBtcCandles() {
   return new Promise((resolve) => {
     const url = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=15';
@@ -159,16 +191,14 @@ function fetchBtcCandles() {
           const json = JSON.parse(data);
           if (json.result && json.result.XXBTZUSD) {
             const raw = json.result.XXBTZUSD.slice(-15);
-            // Exclude currently forming candle; use completed candles
-            const candles = raw.slice(0, -1).map(c => ({
-              time: c[0],
+            const completedCandles = raw.slice(0, -1).map(c => ({
               open: parseFloat(c[1]),
               high: parseFloat(c[2]),
               low: parseFloat(c[3]),
               close: parseFloat(c[4])
             }));
             const livePrice = parseFloat(raw[raw.length - 1][4]);
-            resolve({ candles, livePrice });
+            resolve({ completedCandles, livePrice });
           } else {
             resolve(null);
           }
@@ -180,39 +210,42 @@ function fetchBtcCandles() {
   });
 }
 
-// ---------------- SCANNER LOOP ----------------
-async function runScanner() {
-  try {
-    const btcData = await fetchBtcCandles();
-    if (btcData && btcData.candles && btcData.candles.length >= 5) {
-      const tradeSetup = detectPatterns(btcData.candles);
-      const formattedPrice = btcData.livePrice.toLocaleString('en-US', { minimumFractionDigits: 2 });
+let lastAlertSignature = '';
 
-      if (tradeSetup) {
-        latestBtcSetup = tradeSetup;
-        console.log(`🚨 [BTC ALERT]: ${tradeSetup.pattern} -> ${tradeSetup.signal}`);
-        await broadcastPush(JSON.stringify({
-          title: `🚨 BTC/USD ${tradeSetup.signal} Alert`,
-          body: `${tradeSetup.pattern}\nEntry: $${tradeSetup.entry.toFixed(1)} | SL: $${tradeSetup.stopLoss.toFixed(1)} | Target: $${tradeSetup.target.toFixed(1)}`,
-          url: '/'
-        }));
-      } else {
-        latestBtcSetup = {
-          status: `Live Price: $${formattedPrice} | Scanning 15M Candles (No Reversal Pattern - NO TRADE)`
-        };
-      }
+async function runScanner() {
+  const data = await fetchBtcCandles();
+  if (!data || data.completedCandles.length < 5) return;
+
+  const analysis = analyzeCandles(data.completedCandles, data.livePrice);
+  const whyText = await refineWhyWithAI(analysis, data.livePrice);
+
+  latestState = {
+    livePrice: data.livePrice,
+    setup: analysis.setup,
+    pattern: analysis.pattern,
+    entry: analysis.entry,
+    stopLoss: analysis.stopLoss,
+    target: analysis.target,
+    why: whyText
+  };
+
+  if (analysis.setup !== 'NO TRADE') {
+    const sig = `${analysis.setup}-${analysis.entry}`;
+    if (sig !== lastAlertSignature) {
+      lastAlertSignature = sig;
+      await broadcastPush(JSON.stringify({
+        title: `🚨 BTC/USD ${analysis.setup} (${analysis.pattern})`,
+        body: `Entry: $${analysis.entry.toFixed(2)} | SL: $${analysis.stopLoss.toFixed(2)} | Target: $${analysis.target.toFixed(2)}`,
+        url: '/'
+      }));
     }
-  } catch (e) {
-    console.error('Scan Error:', e.message);
   }
 }
 
-setInterval(runScanner, 15000);
+setInterval(runScanner, 20000);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`=================================`);
-  console.log(`BTC/USD AI SCANNER ACTIVE (PORT ${PORT})`);
-  console.log(`=================================`);
+  console.log(`BTC/USD Scanner Running on Port ${PORT}`);
   runScanner();
 });
