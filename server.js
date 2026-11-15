@@ -28,7 +28,7 @@ let latestState = {
   entry: null,
   stopLoss: null,
   target: null,
-  why: 'Syncing Delta Exchange BTCUSD Perpetual 15M candles...'
+  why: 'Syncing Delta Exchange BTCUSD Perpetual...'
 };
 
 // ---------------- ENDPOINTS ----------------
@@ -163,7 +163,7 @@ function analyzeCandles(candles) {
 async function refineWhyWithAI(analysis, livePrice) {
   if (!ai) return analysis.why;
   try {
-    const prompt = `Delta Exchange BTCUSD Perpetual Live Price: $${livePrice}. Status: ${analysis.setup} (${analysis.pattern}). Note: ${analysis.why}. Write a crisp 1-2 sentence trader explanation for "Why" this is the setup right now.`;
+    const prompt = `Delta Exchange India BTCUSD Perpetual Live Traded Price: $${livePrice}. Status: ${analysis.setup} (${analysis.pattern}). Note: ${analysis.why}. Write a crisp 1-2 sentence trader explanation for "Why" this is the setup right now.`;
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt
@@ -174,11 +174,34 @@ async function refineWhyWithAI(analysis, livePrice) {
   }
 }
 
-// ---------------- DELTA EXCHANGE INDIA LIVE FEED (BTCUSD PERPETUAL) ----------------
+// ---------------- 1. INSTANT LIVE TRADED PRICE (MATCHES MOBILE CHART) ----------------
+function fetchDeltaLiveTicker() {
+  return new Promise((resolve) => {
+    const url = 'https://api.india.delta.exchange/v2/tickers/BTCUSD';
+    https.get(url, { headers: { 'User-Agent': 'NodeApp/1.0' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.result && json.result.close) {
+            resolve(parseFloat(json.result.close)); // Exact Last Traded Price shown on mobile
+          } else {
+            resolve(null);
+          }
+        } catch {
+          resolve(null);
+        }
+      });
+    }).on('error', () => resolve(null));
+  });
+}
+
+// ---------------- 2. 15M COMPLETED CANDLES FOR PATTERN SCAN ----------------
 function fetchDeltaCandles() {
   return new Promise((resolve) => {
     const end = Math.floor(Date.now() / 1000);
-    const start = end - (15 * 15 * 60); // Last 15 candles (15m each)
+    const start = end - (15 * 15 * 60);
     const url = `https://api.india.delta.exchange/v2/history/candles?resolution=15m&symbol=BTCUSD&start=${start}&end=${end}`;
 
     https.get(url, { headers: { 'User-Agent': 'NodeApp/1.0' } }, (res) => {
@@ -188,17 +211,14 @@ function fetchDeltaCandles() {
         try {
           const json = JSON.parse(data);
           if (json.result && Array.isArray(json.result) && json.result.length >= 6) {
-            // Sort oldest to newest
             const sorted = json.result.sort((a, b) => a.time - b.time);
-            const livePrice = parseFloat(sorted[sorted.length - 1].close);
-            // Exclude currently forming candle so pattern checks only run on closed 15M candles
             const completedCandles = sorted.slice(0, -1).map(c => ({
               open: parseFloat(c.open),
               high: parseFloat(c.high),
               low: parseFloat(c.low),
               close: parseFloat(c.close)
             }));
-            resolve({ completedCandles, livePrice });
+            resolve(completedCandles);
           } else {
             resolve(null);
           }
@@ -211,41 +231,54 @@ function fetchDeltaCandles() {
 }
 
 let lastAlertSignature = '';
+let lastScannedCandleClose = null;
 
-async function runScanner() {
-  const data = await fetchDeltaCandles();
-  if (!data || data.completedCandles.length < 5) return;
+async function updateLiveTickAndScan() {
+  // Fast 5-second live traded price sync
+  const liveTradedPrice = await fetchDeltaLiveTicker();
+  if (liveTradedPrice) {
+    latestState.livePrice = liveTradedPrice;
+  }
 
-  const analysis = analyzeCandles(data.completedCandles);
-  const whyText = await refineWhyWithAI(analysis, data.livePrice);
+  // Pattern scan on 15M candles
+  const candles = await fetchDeltaCandles();
+  if (!candles || candles.length < 5) return;
 
-  latestState = {
-    livePrice: data.livePrice,
-    setup: analysis.setup,
-    pattern: analysis.pattern,
-    entry: analysis.entry,
-    stopLoss: analysis.stopLoss,
-    target: analysis.target,
-    why: whyText
-  };
+  const latestClosed = candles[candles.length - 1].close;
+  if (latestClosed !== lastScannedCandleClose) {
+    lastScannedCandleClose = latestClosed;
+    const analysis = analyzeCandles(candles);
+    const whyText = await refineWhyWithAI(analysis, latestState.livePrice || latestClosed);
 
-  if (analysis.setup !== 'NO TRADE') {
-    const sig = `${analysis.setup}-${analysis.entry}`;
-    if (sig !== lastAlertSignature) {
-      lastAlertSignature = sig;
-      await broadcastPush(JSON.stringify({
-        title: `🚨 BTCUSD ${analysis.setup} (${analysis.pattern})`,
-        body: `Entry: $${analysis.entry.toFixed(1)} | SL: $${analysis.stopLoss.toFixed(1)} | Target: $${analysis.target.toFixed(1)}`,
-        url: '/'
-      }));
+    latestState = {
+      livePrice: latestState.livePrice || latestClosed,
+      setup: analysis.setup,
+      pattern: analysis.pattern,
+      entry: analysis.entry,
+      stopLoss: analysis.stopLoss,
+      target: analysis.target,
+      why: whyText
+    };
+
+    if (analysis.setup !== 'NO TRADE') {
+      const sig = `${analysis.setup}-${analysis.entry}`;
+      if (sig !== lastAlertSignature) {
+        lastAlertSignature = sig;
+        await broadcastPush(JSON.stringify({
+          title: `🚨 BTCUSD ${analysis.setup} (${analysis.pattern})`,
+          body: `Entry: $${analysis.entry.toFixed(1)} | SL: $${analysis.stopLoss.toFixed(1)} | Target: $${analysis.target.toFixed(1)}`,
+          url: '/'
+        }));
+      }
     }
   }
 }
 
-setInterval(runScanner, 15000);
+// Poll every 5 seconds so live price matches mobile app in real time
+setInterval(updateLiveTickAndScan, 5000);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`Delta BTCUSD Perpetual Scanner Running on Port ${PORT}`);
-  runScanner();
+  console.log(`Delta India BTCUSD Live Ticker & 15M Scanner Active on Port ${PORT}`);
+  updateLiveTickAndScan();
 });
