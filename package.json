@@ -15,7 +15,6 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "web-push": "^3.6.7",
-    "yahoo-finance2": "^2.13.3"
+    "web-push": "^3.6.7"
   }
 }
