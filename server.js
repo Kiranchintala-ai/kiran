@@ -10,7 +10,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Configure Web Push
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
     process.env.VAPID_EMAIL || 'mailto:tradingalert@gmail.com',
@@ -19,7 +18,6 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   );
 }
 
-// Configure Gemini AI (optional enhancement if GEMINI_API_KEY is set in Render)
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
 
 let subscribers = [];
@@ -30,7 +28,7 @@ let latestState = {
   entry: null,
   stopLoss: null,
   target: null,
-  why: 'Syncing live BTC/USD 15M candles...'
+  why: 'Syncing Delta Exchange BTCUSD Perpetual 15M candles...'
 };
 
 // ---------------- ENDPOINTS ----------------
@@ -44,7 +42,7 @@ app.post('/subscribe', (req, res) => {
 
 app.get('/test-notification', async (req, res) => {
   await broadcastPush(JSON.stringify({
-    title: '🔔 BTC/USD AI Alert Test',
+    title: '🔔 BTCUSD Perpetual Alert Test',
     body: 'Notifications are active!',
     url: '/'
   }));
@@ -71,7 +69,7 @@ async function broadcastPush(payloadString) {
 }
 
 // ---------------- 5-PATTERN DETECTOR ----------------
-function analyzeCandles(candles, livePrice) {
+function analyzeCandles(candles) {
   const current = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
   const pprev = candles[candles.length - 3];
@@ -91,7 +89,7 @@ function analyzeCandles(candles, livePrice) {
       entry: current.close,
       stopLoss: sl,
       target: current.close + (risk * 2),
-      why: `Completed 15M candle formed a Bullish Hammer with a long lower wick ($${sl.toFixed(2)}), showing strong buyer rejection of lower prices.`
+      why: `Completed 15M candle formed a Bullish Hammer with a long lower wick ($${sl.toFixed(1)}), showing strong buyer rejection of lower prices.`
     };
   }
 
@@ -105,7 +103,7 @@ function analyzeCandles(candles, livePrice) {
       entry: current.close,
       stopLoss: sl,
       target: current.close - (risk * 2),
-      why: `Completed 15M candle formed a Bearish Shooting Star with a long upper wick ($${sl.toFixed(2)}), showing heavy seller rejection at the highs.`
+      why: `Completed 15M candle formed a Bearish Shooting Star with a long upper wick ($${sl.toFixed(1)}), showing heavy seller rejection at the highs.`
     };
   }
 
@@ -151,23 +149,21 @@ function analyzeCandles(candles, livePrice) {
     };
   }
 
-  // No Pattern Found
-  const trend = current.close >= current.open ? 'mild bullish' : 'mild bearish';
+  const trend = current.close >= current.open ? 'bullish' : 'bearish';
   return {
     setup: 'NO TRADE',
     pattern: 'None',
     entry: null,
     stopLoss: null,
     target: null,
-    why: `Last completed 15M candle closed at $${current.close.toFixed(2)} (${trend} body), but none of the 5 high-probability reversal patterns formed. Waiting for clean confirmation to protect capital.`
+    why: `Last completed 15M candle closed at $${current.close.toFixed(1)} (${trend} body), with no confirmed reversal pattern among the top 5 setups. Waiting for clean confirmation.`
   };
 }
 
-// Optional Gemini AI Explanation Refinement
 async function refineWhyWithAI(analysis, livePrice) {
   if (!ai) return analysis.why;
   try {
-    const prompt = `BTC/USD Live Price: $${livePrice}. Status: ${analysis.setup} (${analysis.pattern}). Technical note: ${analysis.why}. Write a crisp 1-2 sentence trader explanation for "Why" this is the setup right now.`;
+    const prompt = `Delta Exchange BTCUSD Perpetual Live Price: $${livePrice}. Status: ${analysis.setup} (${analysis.pattern}). Note: ${analysis.why}. Write a crisp 1-2 sentence trader explanation for "Why" this is the setup right now.`;
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt
@@ -178,10 +174,12 @@ async function refineWhyWithAI(analysis, livePrice) {
   }
 }
 
-// ---------------- 24/7 LIVE FEED ----------------
-function fetchBtcCandles() {
+// ---------------- DELTA EXCHANGE INDIA LIVE FEED (BTCUSD PERPETUAL) ----------------
+function fetchDeltaCandles() {
   return new Promise((resolve) => {
-    const url = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=15';
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (15 * 15 * 60); // Last 15 candles (15m each)
+    const url = `https://api.india.delta.exchange/v2/history/candles?resolution=15m&symbol=BTCUSD&start=${start}&end=${end}`;
 
     https.get(url, { headers: { 'User-Agent': 'NodeApp/1.0' } }, (res) => {
       let data = '';
@@ -189,15 +187,17 @@ function fetchBtcCandles() {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          if (json.result && json.result.XXBTZUSD) {
-            const raw = json.result.XXBTZUSD.slice(-15);
-            const completedCandles = raw.slice(0, -1).map(c => ({
-              open: parseFloat(c[1]),
-              high: parseFloat(c[2]),
-              low: parseFloat(c[3]),
-              close: parseFloat(c[4])
+          if (json.result && Array.isArray(json.result) && json.result.length >= 6) {
+            // Sort oldest to newest
+            const sorted = json.result.sort((a, b) => a.time - b.time);
+            const livePrice = parseFloat(sorted[sorted.length - 1].close);
+            // Exclude currently forming candle so pattern checks only run on closed 15M candles
+            const completedCandles = sorted.slice(0, -1).map(c => ({
+              open: parseFloat(c.open),
+              high: parseFloat(c.high),
+              low: parseFloat(c.low),
+              close: parseFloat(c.close)
             }));
-            const livePrice = parseFloat(raw[raw.length - 1][4]);
             resolve({ completedCandles, livePrice });
           } else {
             resolve(null);
@@ -213,10 +213,10 @@ function fetchBtcCandles() {
 let lastAlertSignature = '';
 
 async function runScanner() {
-  const data = await fetchBtcCandles();
+  const data = await fetchDeltaCandles();
   if (!data || data.completedCandles.length < 5) return;
 
-  const analysis = analyzeCandles(data.completedCandles, data.livePrice);
+  const analysis = analyzeCandles(data.completedCandles);
   const whyText = await refineWhyWithAI(analysis, data.livePrice);
 
   latestState = {
@@ -234,18 +234,18 @@ async function runScanner() {
     if (sig !== lastAlertSignature) {
       lastAlertSignature = sig;
       await broadcastPush(JSON.stringify({
-        title: `🚨 BTC/USD ${analysis.setup} (${analysis.pattern})`,
-        body: `Entry: $${analysis.entry.toFixed(2)} | SL: $${analysis.stopLoss.toFixed(2)} | Target: $${analysis.target.toFixed(2)}`,
+        title: `🚨 BTCUSD ${analysis.setup} (${analysis.pattern})`,
+        body: `Entry: $${analysis.entry.toFixed(1)} | SL: $${analysis.stopLoss.toFixed(1)} | Target: $${analysis.target.toFixed(1)}`,
         url: '/'
       }));
     }
   }
 }
 
-setInterval(runScanner, 20000);
+setInterval(runScanner, 15000);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`BTC/USD Scanner Running on Port ${PORT}`);
+  console.log(`Delta BTCUSD Perpetual Scanner Running on Port ${PORT}`);
   runScanner();
 });
