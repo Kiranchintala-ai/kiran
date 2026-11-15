@@ -3,143 +3,176 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Trading Assistant</title>
+  <title>BTC/USD AI Scanner</title>
   <style>
     body {
       background-color: #0b0e14;
-      color: #e2e8f0;
+      color: #f1f5f9;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
       padding: 20px;
+      display: flex;
+      justify-content: center;
     }
     .container {
-      max-width: 600px;
-      margin: 0 auto;
+      width: 100%;
+      max-width: 520px;
     }
     h1 {
-      font-size: 1.4rem;
+      font-size: 1.3rem;
       text-align: center;
-      margin-bottom: 20px;
       color: #38bdf8;
+      margin-bottom: 20px;
     }
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
+    .box {
+      background: #161b26;
+      border: 1px solid #263042;
       border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+      padding: 18px;
+      margin-bottom: 14px;
     }
-    .card-header {
+    .label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .price-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+    .setup-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
-    }
-    .asset-title {
-      font-size: 1.1rem;
-      font-weight: 700;
     }
     .badge {
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    .badge-buy { background: #166534; color: #4ade80; }
-    .badge-sell { background: #991b1b; color: #f87171; }
-    .badge-neutral { background: #334155; color: #94a3b8; }
-    .details {
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-weight: 700;
       font-size: 0.9rem;
+    }
+    .buy { background: #14532d; color: #4ade80; }
+    .sell { background: #7f1d1d; color: #f87171; }
+    .notrade { background: #1e293b; color: #cbd5e1; }
+    .levels {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #263042;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+    .why-text {
+      font-size: 0.95rem;
       line-height: 1.6;
+      color: #e2e8f0;
     }
     .btn {
-      display: block;
       width: 100%;
-      background: #2563eb;
-      color: #fff;
+      padding: 12px;
       border: none;
       border-radius: 8px;
-      padding: 12px;
       font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      margin-top: 10px;
+      background: #2563eb;
+      color: white;
+      margin-top: 6px;
     }
-    .btn:active { background: #1d4ed8; }
-    .status-text {
+    .footer {
       text-align: center;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: #64748b;
-      margin-top: 15px;
+      margin-top: 14px;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>⚡ AI Trading Assistant</h1>
+    <h1>⚡ BTC/USD (24/7)</h1>
 
-    <!-- BTC/USD Card -->
-    <div class="card">
-      <div class="card-header">
-        <span class="asset-title">🪙 BTC/USD (24/7)</span>
-        <span id="btc-badge" class="badge badge-neutral">WAITING</span>
-      </div>
-      <div id="btc-content" class="details">Scanning recent 15M candles...</div>
+    <!-- 1. LIVE PRICE -->
+    <div class="box">
+      <div class="label">Live Price</div>
+      <div id="live-price" class="price-value">Loading...</div>
     </div>
 
-    <!-- Actions -->
-    <button class="btn" onclick="fetchSignals()">🔄 Refresh Signals</button>
-    <button class="btn" style="background:#059669;" onclick="triggerTestPush()">🔔 Test Notification</button>
+    <!-- 2. TRADE SETUP -->
+    <div class="box">
+      <div class="setup-header">
+        <div>
+          <div class="label">Trade Setup</div>
+          <div id="pattern-name" style="font-weight:600; font-size:1rem;">Checking 15M candle...</div>
+        </div>
+        <span id="setup-badge" class="badge notrade">NO TRADE</span>
+      </div>
+      <div id="trade-levels" class="levels" style="display:none;"></div>
+    </div>
 
-    <div id="status-footer" class="status-text">Connecting to scanner engine...</div>
+    <!-- 3. WHY -->
+    <div class="box">
+      <div class="label">Why</div>
+      <div id="why-text" class="why-text">Analyzing market structure...</div>
+    </div>
+
+    <button class="btn" onclick="loadData()">🔄 Refresh</button>
+    <div id="footer" class="footer">Auto-refreshing every 15s</div>
   </div>
 
   <script>
-    async function fetchSignals() {
+    async function loadData() {
       try {
         const res = await fetch('/api/signals');
-        if (!res.ok) throw new Error("HTTP error " + res.status);
         const data = await res.json();
 
-        renderAsset(data.btc);
+        // 1. Live Price
+        if (data.livePrice) {
+          document.getElementById('live-price').innerText = 
+            '$' + Number(data.livePrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
 
-        document.getElementById('status-footer').innerText = 
-          `Subscribers: ${data.subscribers} | Auto-updated: ${new Date().toLocaleTimeString()}`;
+        // 2. Trade Setup
+        const badge = document.getElementById('setup-badge');
+        const patternEl = document.getElementById('pattern-name');
+        const levelsEl = document.getElementById('trade-levels');
+
+        badge.innerText = data.setup;
+        if (data.setup === 'BUY') {
+          badge.className = 'badge buy';
+          patternEl.innerText = data.pattern;
+          levelsEl.style.display = 'block';
+          levelsEl.innerHTML = `
+            <div><strong>Entry:</strong> $${data.entry.toFixed(2)}</div>
+            <div><strong>Stop Loss:</strong> $${data.stopLoss.toFixed(2)}</div>
+            <div><strong>Target (1:2 R:R):</strong> $${data.target.toFixed(2)}</div>
+          `;
+        } else if (data.setup === 'SELL') {
+          badge.className = 'badge sell';
+          patternEl.innerText = data.pattern;
+          levelsEl.style.display = 'block';
+          levelsEl.innerHTML = `
+            <div><strong>Entry:</strong> $${data.entry.toFixed(2)}</div>
+            <div><strong>Stop Loss:</strong> $${data.stopLoss.toFixed(2)}</div>
+            <div><strong>Target (1:2 R:R):</strong> $${data.target.toFixed(2)}</div>
+          `;
+        } else {
+          badge.className = 'badge notrade';
+          patternEl.innerText = 'No Pattern Triggered';
+          levelsEl.style.display = 'none';
+        }
+
+        // 3. Why
+        document.getElementById('why-text').innerText = data.why;
+        document.getElementById('footer').innerText = `Updated: ${new Date().toLocaleTimeString()}`;
       } catch (err) {
-        document.getElementById('status-footer').innerText = "Syncing with engine...";
+        document.getElementById('footer').innerText = 'Syncing...';
       }
     }
 
-    function renderAsset(setup) {
-      const badge = document.getElementById('btc-badge');
-      const content = document.getElementById('btc-content');
-
-      if (!setup || setup.status) {
-        badge.className = "badge badge-neutral";
-        badge.innerText = "WAITING";
-        content.innerHTML = `<div>${setup ? setup.status : 'No current setup'}</div>`;
-        return;
-      }
-
-      const isBuy = setup.signal === 'BUY';
-      badge.className = isBuy ? "badge badge-buy" : "badge badge-sell";
-      badge.innerText = setup.signal;
-
-      content.innerHTML = `
-        <div><strong>Pattern:</strong> ${setup.pattern}</div>
-        <div><strong>Entry:</strong> $${setup.entry.toFixed(2)}</div>
-        <div><strong>Stop Loss:</strong> $${setup.stopLoss.toFixed(2)}</div>
-        <div><strong>Target:</strong> $${setup.target.toFixed(2)} (1:2 R:R)</div>
-      `;
-    }
-
-    function triggerTestPush() {
-      window.location.href = '/test-notification';
-    }
-
-    fetchSignals();
-    setInterval(fetchSignals, 15000);
+    loadData();
+    setInterval(loadData, 15000);
   </script>
 </body>
 </html>
