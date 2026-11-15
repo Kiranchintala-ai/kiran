@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const webpush = require('web-push');
 const https = require('https');
-const yahooFinance = require('yahoo-finance2').default;
 
 const app = express();
 app.use(cors());
@@ -22,7 +21,6 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 let subscribers = [];
 let latestBtcSetup = { status: "Syncing live BTC data..." };
-let latestNiftySetup = { status: "Scanning Nifty 50..." };
 
 // ---------------- SUBSCRIPTION ENDPOINTS ----------------
 app.post('/subscribe', (req, res) => {
@@ -36,7 +34,7 @@ app.post('/subscribe', (req, res) => {
 app.get('/test-notification', async (req, res) => {
   const payload = JSON.stringify({
     title: '🔔 AI Trading Assistant Test',
-    body: 'Notification system is fully working!',
+    body: 'Notification system is working! BTC signals will arrive here.',
     url: '/'
   });
   await broadcastPush(payload);
@@ -46,7 +44,6 @@ app.get('/test-notification', async (req, res) => {
 app.get('/api/signals', (req, res) => {
   res.json({
     btc: latestBtcSetup,
-    nifty: latestNiftySetup,
     subscribers: subscribers.length
   });
 });
@@ -64,7 +61,7 @@ async function broadcastPush(payloadString) {
 }
 
 // ---------------- 5 HIGH-PROBABILITY PATTERNS ENGINE ----------------
-function detectPatterns(candles, assetName) {
+function detectPatterns(candles) {
   if (!candles || candles.length < 5) return null;
 
   const current = candles[candles.length - 1];
@@ -81,13 +78,12 @@ function detectPatterns(candles, assetName) {
     const sl = current.low;
     const risk = current.close - sl;
     return {
-      asset: assetName,
+      asset: 'BTC/USD',
       pattern: 'Hammer (Rejection of Lows)',
       signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2),
-      currentPrice: current.close
+      target: current.close + (risk * 2)
     };
   }
 
@@ -96,13 +92,12 @@ function detectPatterns(candles, assetName) {
     const sl = current.high;
     const risk = sl - current.close;
     return {
-      asset: assetName,
+      asset: 'BTC/USD',
       pattern: 'Shooting Star (Top Rejection)',
       signal: 'SELL',
       entry: current.close,
       stopLoss: sl,
-      target: current.close - (risk * 2),
-      currentPrice: current.close
+      target: current.close - (risk * 2)
     };
   }
 
@@ -111,13 +106,12 @@ function detectPatterns(candles, assetName) {
     const sl = Math.min(current.low, prev.low);
     const risk = current.close - sl;
     return {
-      asset: assetName,
+      asset: 'BTC/USD',
       pattern: 'Bullish Engulfing',
       signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2),
-      currentPrice: current.close
+      target: current.close + (risk * 2)
     };
   }
 
@@ -126,13 +120,12 @@ function detectPatterns(candles, assetName) {
     const sl = Math.max(current.high, prev.high);
     const risk = sl - current.close;
     return {
-      asset: assetName,
+      asset: 'BTC/USD',
       pattern: 'Bearish Engulfing',
       signal: 'SELL',
       entry: current.close,
       stopLoss: sl,
-      target: current.close - (risk * 2),
-      currentPrice: current.close
+      target: current.close - (risk * 2)
     };
   }
 
@@ -141,23 +134,22 @@ function detectPatterns(candles, assetName) {
     const sl = Math.min(current.low, prev.low, pprev.low);
     const risk = current.close - sl;
     return {
-      asset: assetName,
+      asset: 'BTC/USD',
       pattern: 'Morning Star Pattern',
       signal: 'BUY',
       entry: current.close,
       stopLoss: sl,
-      target: current.close + (risk * 2),
-      currentPrice: current.close
+      target: current.close + (risk * 2)
     };
   }
 
   return null;
 }
 
-// ---------------- 24/7 BTC LIVE FEED (KRAKEN SPOT TICKER) ----------------
-function fetchBtcLiveData() {
+// ---------------- 24/7 BTC LIVE FEED (15M OHLC CANDLES) ----------------
+function fetchBtcCandles() {
   return new Promise((resolve) => {
-    const url = 'https://api.kraken.com/0/public/Ticker?pair=XBTUSD';
+    const url = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=15';
 
     https.get(url, { headers: { 'User-Agent': 'NodeApp/1.0' } }, (res) => {
       let data = '';
@@ -166,20 +158,17 @@ function fetchBtcLiveData() {
         try {
           const json = JSON.parse(data);
           if (json.result && json.result.XXBTZUSD) {
-            const pair = json.result.XXBTZUSD;
-            const markPrice = parseFloat(pair.c[0]);
-            const high24 = parseFloat(pair.h[1]);
-            const low24 = parseFloat(pair.l[1]);
-            const openToday = parseFloat(pair.o);
-
-            // Construct recent price candles for pattern validation
-            const candle = {
-              open: openToday,
-              high: high24,
-              low: low24,
-              close: markPrice
-            };
-            resolve({ markPrice, high24, low24, candle });
+            const raw = json.result.XXBTZUSD.slice(-15);
+            // Exclude currently forming candle; use completed candles
+            const candles = raw.slice(0, -1).map(c => ({
+              time: c[0],
+              open: parseFloat(c[1]),
+              high: parseFloat(c[2]),
+              low: parseFloat(c[3]),
+              close: parseFloat(c[4])
+            }));
+            const livePrice = parseFloat(raw[raw.length - 1][4]);
+            resolve({ candles, livePrice });
           } else {
             resolve(null);
           }
@@ -187,92 +176,43 @@ function fetchBtcLiveData() {
           resolve(null);
         }
       });
-    }).on('error', (err) => {
-      console.error('BTC Feed Error:', err.message);
-      resolve(null);
-    });
+    }).on('error', () => resolve(null));
   });
 }
 
-// ---------------- NIFTY 50 (YAHOO FINANCE) ----------------
-async function fetchNiftyCandles() {
+// ---------------- SCANNER LOOP ----------------
+async function runScanner() {
   try {
-    const result = await yahooFinance.chart('^NSEI', {
-      period1: '5d',
-      interval: '15m'
-    });
-    if (result && result.quotes) {
-      return result.quotes.filter(q => q.open && q.close && q.high && q.low);
-    }
-    return null;
-  } catch (err) {
-    return null;
-  }
-}
+    const btcData = await fetchBtcCandles();
+    if (btcData && btcData.candles && btcData.candles.length >= 5) {
+      const tradeSetup = detectPatterns(btcData.candles);
+      const formattedPrice = btcData.livePrice.toLocaleString('en-US', { minimumFractionDigits: 2 });
 
-function isIndianMarketOpen() {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  const day = now.getDay();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-
-  if (day === 0 || day === 6) return false;
-  const totalMins = hour * 60 + minute;
-  return totalMins >= 555 && totalMins <= 930;
-}
-
-// ---------------- MASTER SCANNER LOOP ----------------
-async function runMasterScan() {
-  try {
-    // 1. Process BTC/USD (24/7)
-    const btc = await fetchBtcLiveData();
-    if (btc && btc.markPrice) {
-      const formattedPrice = btc.markPrice.toLocaleString('en-US', { minimumFractionDigits: 2 });
-      const formattedHigh = btc.high24.toLocaleString('en-US', { minimumFractionDigits: 2 });
-      const formattedLow = btc.low24.toLocaleString('en-US', { minimumFractionDigits: 2 });
-
-      latestBtcSetup = {
-        status: `Live Price: $${formattedPrice} | 24h High: $${formattedHigh} | 24h Low: $${formattedLow} (No Reversal Pattern - NO TRADE)`
-      };
-    } else {
-      latestBtcSetup = { status: "Syncing live BTC feed..." };
-    }
-
-    // 2. Process NIFTY 50 (Indian Market Hours)
-    if (isIndianMarketOpen()) {
-      const niftyCandles = await fetchNiftyCandles();
-      if (niftyCandles && niftyCandles.length >= 5) {
-        const lastCandle = niftyCandles[niftyCandles.length - 1];
-        const niftyTrade = detectPatterns(niftyCandles, 'NIFTY 50');
-
-        if (niftyTrade) {
-          latestNiftySetup = niftyTrade;
-          await broadcastPush(JSON.stringify({
-            title: `🚨 NIFTY 50 ${niftyTrade.signal} Alert`,
-            body: `${niftyTrade.pattern}\nEntry: ₹${niftyTrade.entry.toFixed(1)} | SL: ₹${niftyTrade.stopLoss.toFixed(1)} | Target: ₹${niftyTrade.target.toFixed(1)}`,
-            url: '/'
-          }));
-        } else {
-          latestNiftySetup = {
-            status: `Market Active | Live Nifty: ₹${lastCandle.close.toFixed(2)} (NO TRADE)`
-          };
-        }
+      if (tradeSetup) {
+        latestBtcSetup = tradeSetup;
+        console.log(`🚨 [BTC ALERT]: ${tradeSetup.pattern} -> ${tradeSetup.signal}`);
+        await broadcastPush(JSON.stringify({
+          title: `🚨 BTC/USD ${tradeSetup.signal} Alert`,
+          body: `${tradeSetup.pattern}\nEntry: $${tradeSetup.entry.toFixed(1)} | SL: $${tradeSetup.stopLoss.toFixed(1)} | Target: $${tradeSetup.target.toFixed(1)}`,
+          url: '/'
+        }));
+      } else {
+        latestBtcSetup = {
+          status: `Live Price: $${formattedPrice} | Scanning 15M Candles (No Reversal Pattern - NO TRADE)`
+        };
       }
-    } else {
-      latestNiftySetup = { status: "Market Closed (Opens 9:15 AM Mon-Fri)" };
     }
   } catch (e) {
     console.error('Scan Error:', e.message);
   }
 }
 
-// Run scanner every 15 seconds
-setInterval(runMasterScan, 15000);
+setInterval(runScanner, 15000);
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`=================================`);
-  console.log(`DUAL AI SCANNER ACTIVE (PORT ${PORT})`);
+  console.log(`BTC/USD AI SCANNER ACTIVE (PORT ${PORT})`);
   console.log(`=================================`);
-  runMasterScan();
+  runScanner();
 });
